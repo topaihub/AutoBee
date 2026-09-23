@@ -1,0 +1,39 @@
+packages:
+  - '.'
+
+# Windows 上默认 isolated 链接器会在 node_modules/.pnpm 里创建符号链接，
+# 未开启开发者模式/长路径受限时会报 "Failed to create symlink ... os error 2"。
+# pnpm 12 规定 nodeLinker / symlink 只能写在 pnpm-workspace.yaml（.npmrc 仅读 auth/registry）。
+# hoisted = 平铺 node_modules，不创建符号链接；symlink:false 让虚拟 store 也不含符号链接。
+nodeLinker: hoisted
+symlink: false
+
+# 关闭“包最短发布年龄”门槛，避免刚发布的新版本（如 vite 8 / svelte 5 / typescript-eslint 8.70）
+# 因比默认年龄新而被拦截。开发机构建下可接受；若要恢复防护可改成正数天数。
+minimumReleaseAge: 0
+
+# pnpm 12 默认 strictDepBuilds=true：未在 allowBuilds 中显式允许的构建脚本会导致
+# 安装失败（ERR_PNPM_IGNORED_BUILDS）。下面列出本项目需要的原生包。
+# 若安装仍报 "ignored build scripts"，pnpm 会自动把包名追加到此处并给占位值，
+# 把它们设为 true 再重跑即可。
+allowBuilds:
+  esbuild: true
+  rollup: true
+  '@tailwindcss/oxide': true
+  '@tailwindcss/node': true
+  '@parcel/watcher': true
+  unrs-resolver: true
+
+# pnpm 12 首次安装时自动生成：这些 @typescript-eslint 版本比最短发布年龄新，需显式排除。
+minimumReleaseAgeExclude:
+  - '@typescript-eslint/eslint-plugin@8.70.1'
+  - '@typescript-eslint/parser@8.70.1'
+  - '@typescript-eslint/project-service@8.70.1'
+  - '@typescript-eslint/scope-manager@8.70.1'
+  - '@typescript-eslint/tsconfig-utils@8.70.1'
+  - '@typescript-eslint/type-utils@8.70.1'
+  - '@typescript-eslint/types@8.70.1'
+  - '@typescript-eslint/typescript-estree@8.70.1'
+  - '@typescript-eslint/utils@8.70.1'
+  - '@typescript-eslint/visitor-keys@8.70.1'
+  - typescript-eslint@8.70.1

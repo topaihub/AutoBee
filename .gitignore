@@ -1,0 +1,40 @@
+# 依赖与构建产物
+# 两处都锚定到仓库根。不加前缀斜杠的话会顺带吞掉
+# tools/pnpm-standalone/package/dist/node_modules/ —— 那是 tarball 自带的
+# pnpm 依赖(get-pnpm 等),删掉后 pnpm.mjs 直接报 Cannot find module。
+/node_modules/
+/dist/
+/build/
+.svelte-kit/
+src-tauri/target/
+
+# Tauri 每次构建都会重新生成（由 tauri.conf.json + capabilities/ 推出来）
+src-tauri/gen/schemas/
+
+# 厂商 Key、本机缓存、日志都在 %LOCALAPPDATA%\AutoBee，不在仓库里。
+# 这几条是兜底：万一哪天有人把数据目录配到 repo 内，别让密钥跟着提交上去。
+*.local
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+# 锚定:不加斜杠会吞掉 node-gyp 自带的 gyp/data/(两个源文件)。
+/data/
+*.log
+
+# 随手跑出来的临时文件（曾经的验证脚本、改坏前的备份）
+*.bak
+*.tmp
+
+# 内置 pnpm 的原生二进制:45.5 MB,不在 pnpm-12.5.1.tgz 里,是首次运行
+# bin/pnpm.mjs 时联网下载的。不提交它换来仓库从 50 MB 降到 5 MB,
+# 代价是新机器第一次跑 dev.bat / build-app.bat 需要能连 npm registry。
+tools/pnpm-standalone/package/pnpm-native.exe
+
+# 编辑器与系统垃圾
+.vscode/
+.idea/
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store

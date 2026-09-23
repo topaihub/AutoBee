@@ -1,0 +1,26 @@
+{
+  "servers": {
+    "typescript-language-server": {
+      "command": "typescript-language-server.exe",
+      "args": ["--stdio"],
+      "fileTypes": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
+      "rootMarkers": ["tsconfig.json", "package.json"]
+    },
+    "svelte": {
+      "command": "svelteserver.exe",
+      "args": ["--stdio"],
+      "fileTypes": [".svelte"],
+      "rootMarkers": ["svelte.config.js"]
+    },
+    "rust-analyzer": {
+      "command": "cmd.exe",
+      "args": ["/d", "/c", ".omp\\rust-analyzer.cmd"],
+      "rootMarkers": ["src-tauri/Cargo.toml", "Cargo.toml"],
+      "settings": {
+        "rust-analyzer": {
+          "linkedProjects": ["src-tauri/Cargo.toml"]
+        }
+      }
+    }
+  }
+}

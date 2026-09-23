@@ -1,0 +1,52 @@
+{
+  "name": "autobee-desktop",
+  "version": "0.1.0",
+  "description": "桌面版路线规划（Tauri + Svelte 5 + Tailwind 4 + shadcn 风格组件）",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.5.1",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:rust": "scripts\\cargo-msvc.bat test",
+    "clippy": "scripts\\cargo-msvc.bat clippy --all-targets -- -D warnings",
+    "fmt:rust": "scripts\\cargo-msvc.bat fmt -- --check",
+    "fmt:rust:fix": "scripts\\cargo-msvc.bat fmt",
+    "dev:app": "scripts\\dev.bat",
+    "build:app": "scripts\\build-app.bat",
+    "verify": "pnpm run check && pnpm run lint && pnpm run test && pnpm run test:rust && pnpm run clippy && pnpm run fmt:rust",
+    "tauri": "tauri"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "//deps": "插件版本必须与 src-tauri/Cargo.toml 的 Rust crate 同 major/minor，否则 tauri build 拒绝构建。",
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-opener": "^2.5.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.11.5",
+    "@types/node": "^26.6.2",
+    "eslint": "^10.11.0",
+    "eslint-plugin-svelte": "^3.23.0",
+    "globals": "^17.12.0",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.0",
+    "typescript-eslint": "^8.70.1",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}

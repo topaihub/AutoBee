@@ -1,0 +1,7 @@
+skills:
+  enabled: true
+  enableClaudeProject: true
+  includeSkills:
+    - hallmark
+    - shadcn-svelte
+    - ponytail

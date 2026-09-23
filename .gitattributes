@@ -1,0 +1,23 @@
+# 默认交给 git 自己判断文本/二进制，并在仓库里统一存 LF。
+* text=auto
+
+# .bat 必须是 CRLF：cmd.exe 解析 LF 换行的批处理会出错（把 goto 标签、
+# 续行括号读错），而症状是「脚本莫名跑不到一半」，不会有人想到是换行符。
+# scripts/*.bat 的文件头注释里也写了这一条。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# .sh 反过来必须是 LF：Windows 上编辑后带着 CR 进 Linux/Git-Bash，
+# 会报 `$'\r': command not found`。
+*.sh text eol=lf
+
+# 二进制，别做换行转换也别塞进 diff。
+*.png binary
+*.ico binary
+*.tgz binary
+*.exe binary
+*.woff2 binary
+
+# 锁文件的 diff 没人读，但冲突时要能合。
+pnpm-lock.yaml -diff
+Cargo.lock -diff

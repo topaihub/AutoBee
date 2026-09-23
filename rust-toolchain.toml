@@ -1,0 +1,5 @@
+[toolchain]
+# 锁定与 ai-installer 相同的版本：两台机器上表现一致，clippy 的提示也不会漂。
+channel = "1.92.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
