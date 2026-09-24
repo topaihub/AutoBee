@@ -141,14 +141,16 @@ flowchart LR
 - `src/lib/components/app/RouteCard.svelte`：展示可解释的负担原因；在长步行或非普通画像存在换乘时显示“设施无障碍信息待确认”。
 - `src/lib/state/planner.svelte.ts`：切换画像只对当前候选本地重排，不重复调用路线 API。
 - `src/lib/domain/accessibility.test.ts`：覆盖负担指标、行李画像排序和长步行提示。
+- `src-tauri/core/src/life_circle.rs` + `commands.rs` 的 `get_life_circle`：15 分钟生活圈已接通，用**百度地点检索 + 百度真实步行路线**逐点验证可达性，不是直线距离估算。前端在 `+page.svelte` 的生活圈面板，无 AK 时给空态而不显示伪造结果。
 
 尚未实现且必须使用百度数据完成的部分：
 
-- 15 分钟生活圈的多 POI 检索与真实步行时间分层。
+- `BaiduProvider` 与 JS API GL 主链路。当前 `factory.rs:19` 的 `is_implemented` 只认 `Tencent | Amap`，百度即使填了 AK 也选不中；主地图仍是 `tiles.rs` 的 ArcGIS 栅格瓦片。
 - 电梯、坡度、路缘坡道、施工与实时公交的事实证据。
-- 百度 `BaiduProvider` 与 JS API GL 主链路。
+- 4.2 的六个决策标签（低步行、少换乘、直达优先、时间最短、长步行提醒、多换乘提醒）。`RouteCard.svelte` 目前只有“地铁”“公交”两个模式徽标，决策标签一个都没有。
+- 阈值可配置。`RouteCard.svelte:42` 把 500 米写死在模板里，与 4.2 末尾“不应写死在 UI”相冲突。
 
-因此当前版本只能称为“基于路线分段的低步行/少换乘建议”，不能称为完整无障碍导航。
+因此当前版本只能称为“基于路线分段的低步行/少换乘建议 + 真实步行时间的生活圈”，不能称为完整无障碍导航 —— 缺的是设施级事实，不是步行时间的真实性。
 
 ## 1. 参赛定位
 
@@ -351,38 +353,104 @@ flowchart LR
 
 ### 7.2 新增模块
 
+现状核对过，只有一个文件是真的要从零新建：
+
 ```text
-src-tauri/core/src/providers/baidu.rs    # 百度 API adapter
-src-tauri/core/src/accessibility.rs      # 负担指标、排序与推荐理由
-src/lib/domain/accessibility.ts          # 前端展示模型和格式化
-src/lib/components/app/Recommendation.svelte
-src/lib/components/app/AccessibilityFilter.svelte
-docs/AutoBee-百度地图大赛设计方案.md
+src-tauri/core/src/providers/baidu.rs    # 百度 API adapter —— 唯一真正缺的模块
 ```
 
-## 8. 实施计划
+以下都**已经在源码里**，是改而不是新增：
 
-### M1：百度主链路可用（2 至 3 天）
+```text
+src/lib/domain/accessibility.ts          # 已有 64 行：routeBurden / burdenScore /
+                                         # sortedRoutes / burdenReason / PROFILE_OPTIONS
+src/lib/state/planner.svelte.ts          # 已接 sortedRoutes
+src/lib/components/app/RouteCard.svelte  # 已接 burdenReason / routeBurden
+src/routes/+page.svelte                  # 已有出行画像选择器（PROFILE_OPTIONS）
+```
 
-1. 创建百度地图开放平台应用，分别获取 Web 服务 AK 和 JS API GL AK。
-2. 实现 `BaiduProvider::suggest`、`geocode`、`plan_route`。
-3. 将百度标记为已实现且默认优先级设为 1。
-4. 用百度 JS API GL 替换当前主地图。
-5. 验收：输入 POI、选点、地铁/公交/步行规划和路线覆盖全部来自百度。
+**负担评分是前端 TypeScript 实现，不要在 Rust 侧再写一份。** 初版这里列了
+`src-tauri/core/src/accessibility.rs`，那个文件不存在也不需要存在 —— 排序只影响展示，
+数据已经在前端手里。照初版建这个文件的结果是两套评分逻辑各算一遍、结论还不一定一致。
 
-### M2：负担评分与解释（2 天）
+同理，初版列的 `Recommendation.svelte` 与 `AccessibilityFilter.svelte` 也不必新建：
+推荐理由已在 `RouteCard.svelte` 内，画像切换已在 `+page.svelte` 内。要拆成独立组件
+得有别的理由（比如复用），不是因为本方案要求。
 
-1. 提取步行、最长步行与换乘次数。
-2. 增加四种决策目标和确定性排序。
-3. 增加推荐理由卡片与风险标签。
-4. 验收：同一对起终点切换目标后，排序和解释可见变化。
+## 8. 实施任务清单
 
-### M3：展示完整度（1 至 2 天）
+每个任务写明改哪个文件、做什么、怎么算完成。判据是可运行的命令或能在界面上看见的现象，不是“写完了”。
 
-1. 固化南京和北京两个可稳定演示场景。
-2. 制作引导状态、错误状态、无 AK 状态、网络失败状态。
-3. 录制 3 分钟 Demo 视频与 8 分钟路演视频。
-4. 准备截图、架构图、测试报告和 README。
+起点不是零：`accessibility.ts` 与生活圈都已经在源码里（见 0.6，该节已按实际情况更正）。真正缺的是 `BaiduProvider` —— `factory.rs:19` 的 `is_implemented` 至今只认 `Tencent | Amap`，所以百度即使填了 AK 也永远选不中。
+
+### M1 百度主链路可用
+
+- [ ] **M1-1 申请两个 AK**
+  - 百度地图开放平台建应用，分别取 **Web 服务 AK**（服务端调用）与 **JS API GL AK**（浏览器内地图）。
+  - 这是两个不同的 AK，用错一个的表现是“请求通了但 `status` 非 0”，不是网络错误。设置页里要分两个字段存，不要合成一个。
+  - 判据：两个 AK 都能用 curl / 浏览器各打通一次最小请求。
+- [ ] **M1-2 实现 `BaiduProvider`**
+  - 新建 `src-tauri/core/src/providers/baidu.rs`，实现 `RouteProvider` 的四个方法（`providers/mod.rs:36-61`）：`id()`、`suggest(&str, usize) -> Result<Vec<Place>, _>`、`geocode(&str) -> Result<Option<Place>, _>`、`plan_route(&RouteRequest)`。
+  - `suggest` 搜不到时返回 `Ok(vec![])`、`geocode` 搜不到时返回 `Ok(None)`，都**不是错误**（trait 文档里写明了）。把空结果当错误抛，调用方那条“退到地址解析”的兜底就永远走不到。
+  - 照 `providers/amap.rs` 的形状写：同样的 `http::get_json`、同样的错误码约定、同样的 `mod tests`。不要另起一套。
+  - 坐标系填 `Crs::Bd09`（`models.rs` 已有该枚举）。百度返回的是 BD-09，填错的后果是全图偏移几百米而不报错。
+  - 判据：`cargo test -p route-core` 全绿，含新加的响应解析单测（喂一段真实百度响应的 JSON 片段，断言解出的字段与坐标系）。
+- [ ] **M1-3 登记进工厂与注册表**
+  - `factory.rs:19` 的 `is_implemented` 加 `ProviderId::Baidu`；`create_provider` 的 `match` 加一条 case。
+  - `registry.rs:110` 那条 `ProviderMeta` 的 `priority` 现在是 `4`，国内组里排最后（腾讯 1、高德 2、天地图 3）。要让百度成为国内首选就改成 `0`。
+  - **不要改成 `1`**：`registry.rs:199` 是 `sort_by_key`，稳定排序，和腾讯的 `1` 打平时按注册表里的出现顺序决定，而腾讯在 `registry.rs:73` 比百度靠前 —— 结果还是腾讯第一，改了却看不出任何变化。
+  - **这一步漏了，前两步等于没做**：adapter 写好了但 `is_implemented` 不认它，设置页会继续标“待接入”，编排层静默跳过它，而且没有任何报错（`factory.rs:15-16` 记的就是这个坑）。
+  - 改 `priority` 会让 `registry.rs:246` 的 `国内按优先级排序` 测试失败 —— 它断言的是 `[Tencent, Amap, Baidu]`。那是这次改动的**预期结果**，把断言更新成新次序，不要删掉这个测试。
+  - 判据：设置页里百度不再标“待接入”；填入 Web 服务 AK 后规划一次南京的地铁路线，日志里 provider 是 `baidu`；`cargo test -p route-core` 全绿。
+- [ ] **M1-4 主地图换百度 JS API GL**
+  - `MapCanvas.svelte` 现在画的是 `tiles.rs` 的 ArcGIS 栅格瓦片（`TILE_SOURCES` 只有一项）。换成 JS API GL 是替换渲染层，不是加一个瓦片源。
+  - `tauri.conf.json:23` 的 `csp` 当前是 `null`，所以加载外部脚本不需要改配置。**但这也意味着现在没有任何 CSP** —— 若评审要求收紧，收紧的同时必须把百度的脚本域与接口域列进白名单，否则地图会空白。
+  - JS API GL 的 AK 会出现在前端代码里，这是该 SDK 的既定用法；在开放平台侧配好 Referer 白名单，别把 Web 服务 AK 也一起下发到前端。
+  - 判据：地图底图、标注、路线覆盖物全部来自百度；`pnpm dev:app` 里拖动缩放不卡；断网时给出明确错误态而不是白屏。
+- [ ] **M1-5 验收整条链路**
+  - 判据：输入 POI 联想、选点、地铁/公交/步行三种规划、路线覆盖物，**五项全部来自百度**。这就是 5.2 那条“不把百度只当底图”的门槛。
+
+### M2 负担评分与解释
+
+指标计算与画像排序已在源码里（0.6），这一组要做的是三件事：把它接到百度数据上、补齐 6.2 那五种排序里还缺的三种、把 4.2 那六个决策标签从零做出来。
+
+- [ ] **M2-1 确认指标在百度数据上成立**
+  - `accessibility.ts` 算总步行、最长步行、线路变更次数，它吃的是归一化后的 `Route` / `Segment`。百度 adapter 必须把这些字段填对，否则评分静默变成 0。
+  - 判据：`accessibility.test.ts` 之外，加一条用**真实百度响应**归一化后的样本数据跑排序的测试。现有测试用的是构造数据，它证明不了 adapter 填对了字段。
+- [ ] **M2-2 补齐 6.2 的五种排序**
+  - 先分清两个互不相干的维度，6.2 把它们混在一张清单里了：
+    - `SortBy`（`models.rs:166`、`types.ts:16`）只有 `Time | Distance` 两项，是**后端**枚举。
+    - `TravelProfile`（`accessibility.ts:4`）有 `standard | luggage | slow` 三项，是**纯前端**的出行画像，后端不认。
+  - 6.2 列的五条里，前两条（时间最短、距离最短）已由 `SortBy` 覆盖；剩下三条（少换乘、低步行、无障碍优先）是画像维度的排序，落在 `accessibility.ts` 的 `burdenScore` 里。
+  - 所以这一条要做的是补 `burdenScore` 的权重分支，让“少换乘”“低步行”各有一套明确权重，而不是给 `SortBy` 加成员 —— 给 `SortBy` 加成员要一路改到 Rust 侧算路，而排序只影响展示。
+  - 排序必须确定性：`sortedRoutes` 要用稳定排序，并且分数相同时有明确的次级比较字段，不能每次刷新换一个顺序。
+  - 判据：同一对起终点切换画像，排序与解释文案**可见变化**；连点两次同一画像，结果完全一致；`accessibility.test.ts` 里每个画像各有一条断言。
+- [ ] **M2-3 决策标签（6 个，现在一个都没有）**
+  - `RouteCard.svelte` 现在只渲染“地铁”“公交”两个模式徽标（`:49`、`:52`）与线路名链。4.2 那六个**决策**标签（低步行、少换乘、直达优先、时间最短、长步行提醒、多换乘提醒）一个都还没有。
+  - 前四个是**候选集内的相对判断**（“在候选中最低”），必须在拿到整组路线之后算，不能在单个卡片里算。算的地方是 `accessibility.ts`（它已经能看到整个数组），由 `RouteCard` 接收结果，而不是自己判断。
+  - 后两个是绝对阈值判断，可以在卡片内算。
+  - 判据：同一组候选里，“低步行”“时间最短”各只出现在一张卡片上（相对标签不能同时贴给两条路线，除非真的同分）。
+- [ ] **M2-4 阈值挪进设置**
+  - `RouteCard.svelte:42` 现在把 500 米写死在模板的 `{#if}` 里。4.2 末尾那句“阈值必须进入设置或策略配置，不应写死在 UI”说的就是这一处。
+  - 挪进 `Settings`（`config.rs:19` 定义，`Config` 在 `:57` 持有它），前端从已有的设置状态读；默认值保持 500 米与 2 次换乘，行为不变。加字段记得同步 `impl Default`（`config.rs:35`）。
+- [ ] **M2-5 守住诚信边界**
+  - `RouteCard.svelte:43` 已有“设施无障碍信息待确认”。按 6.3：没接入电梯/坡道/施工数据前，文案只说“低步行/少换乘建议”，**不承诺“全程无障碍”**。
+  - 判据：六个标签各能在一个真实场景里出现一次；`grep -rn "无障碍" src/lib/components src/routes` 的每一处命中都不是承诺性说法。
+
+### M3 展示完整度
+
+- [ ] **M3-1 固化两个演示场景**
+  - 南京（孝陵卫地铁站 → 南京南站）与北京各一个，参数写进文档，每次演示照同一条路径走。
+  - 判据：同一场景连跑三次，路线与排序一致。
+- [ ] **M3-2 四个非正常态**
+  - 引导态、错误态、无 AK 态、网络失败态。无 AK 时不显示伪造结果（当前生活圈那条空态文案已是这个做法，照它写）。
+  - 判据：四个状态各能手动触发一次并截图。断网、清空 AK 是最快的两种触发方式。
+- [ ] **M3-3 录视频**
+  - 3 分钟 Demo 与 8 分钟路演，脚本见第 9 节。
+  - 判据：两个视频文件存在且时长符合，演示中不出现异常态。
+- [ ] **M3-4 提交材料**
+  - 截图、架构图、测试报告、README，逐项对照第 10 节的清单勾掉。
+  - 判据：第 10 节的复选框全部勾上。
 
 ## 9. Demo 脚本
 
@@ -441,7 +509,8 @@ docs/AutoBee-百度地图大赛设计方案.md
 4. 至少一个演示场景能清楚证明“低步行/少换乘”与“最快”不同。
 5. 评分逻辑透明、说明边界，不虚构无障碍设施数据。
 6. 打包 Demo、视频、路演稿、截图和投票页素材齐全。
-## 7.3 参赛版页面重构方案
+
+## 13. 参赛版页面重构方案
 
 ### 页面定位
 
