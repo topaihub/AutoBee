@@ -204,9 +204,9 @@ llm_models      一行 = 用户从该入口挑中的一个模型
 
 全部加进 `src-tauri/shell/src/credentials/schema.rs` 的 `CREATE` 常量(`IF NOT EXISTS`,每次开库无条件执行)。
 
-**`VERSION` 加到 5,原文「保持 4 不变」是错的** —— 同一份文档的 M1-1 任务里写的是「加一到 5」,两处自相矛盾。已按加到 5 实现:老库的 `user_version` 停在 4,不加的话将来真要迁移时无从判断这一版跑过没有。`migrate` 里 `from < 5` 不需要动作(`CREATE` 里的 `IF NOT EXISTS` 已经把表补齐),但版本号必须往前走。
+**`VERSION` 现已是 7,原文「保持 4 不变」与「加一到 5」都是过期的。** 实际演进:M1-1 把配置两表加进去时 `VERSION` 走到 5,M1 后续的百度双 AK 列把它推到 6,本轮加会话三表推到 7。`migrate` 里 `from < 7` 不需要动作(`CREATE` 的 `IF NOT EXISTS` 已把表补齐),但版本号必须往前走 —— 否则将来真要改写数据时无从判断这一版跑过没有。
 
-**外键开在 `prepare` 里、建表之前**(`schema.rs:76-78`),不是 `store.rs` 的 `open_at`。理由见 M1-1 任务条,实测已验证。
+**外键开在 `prepare` 里、建表之前**(`schema.rs:99`,`execute_batch(CREATE)` 在 `:102`),不是 `store.rs` 的 `open_at`。理由见 M1-1 任务条,实测已验证。
 
 ```sql
 CREATE TABLE IF NOT EXISTS llm_providers (
@@ -250,7 +250,7 @@ CREATE INDEX IF NOT EXISTS idx_llm_messages_conv
   ON llm_messages(conv_id, created_at);
 ```
 
-`ON DELETE CASCADE` 需要 `PRAGMA foreign_keys = ON`,当前 `Store::open_at` 没有开。**加表时必须一起开**,否则删 provider 会留下孤儿模型行。这是本方案对现有代码唯一的破坏性改动,见 11.1。
+`ON DELETE CASCADE` 需要 `PRAGMA foreign_keys = ON`。**它已经开了**:`schema.rs:99`,在 `prepare` 里、`execute_batch(CREATE)` 之前。原文「当前 `Store::open_at` 没有开」是 M1-1 之前的状态,M1-1 已落地,11.1 的「破坏性改动」一节随之作废。
 
 ### 4.2 不存什么
 
@@ -380,7 +380,9 @@ sequenceDiagram
 
 **被 `max_tokens` 截断的 tool call 必须整批作废,不能执行。**(pi,已核实)
 
-`pi/packages/agent/src/agent-loop.ts:468-474` 的注释点明这个失败模式:流式 tool-call 参数是「尽力而为」的 JSON 抢救解析器收尾的,所以被截断的消息**仍然能产出语法合法的 `tool_calls`**。参数解析通过、校验通过,但内容是残缺的。
+`pi/packages/agent/src/agent-loop.ts` 的注释点明这个失败模式:流式 tool-call 参数是「尽力而为」的 JSON 抢救解析器收尾的(`packages/ai/src/utils/json-parse.ts:104-142` 的 `parseStreamingJson`,四级降级),所以被截断的消息**仍然能产出语法合法的 `tool_calls`**。参数解析通过、schema 校验通过,但内容是残缺的。**行号更正:判断分支在 `agent-loop.ts:262-270`,处理函数 `failToolCallsFromTruncatedMessage` 在 `475-500`(`468-474` 是它的文档注释)。**
+
+推论:**安全性只能靠 `finish_reason` / `stop_reason` 判,不能靠「参数能否解析成功」判。** 后者永远会说「能」。
 
 具体到 AutoBee:`plan_route` 的参数被截在 `{"from":"孝陵卫","to":"南京南"` —— 补全后是一个真实存在的地名,算出一条去错地方的路线,然后自信地报给用户。**这正是无声错误**,比报错糟得多。
 
@@ -638,7 +640,9 @@ nullclaw(`ai/nullclaw`,Zig)手写了完整 MCP 客户端,`src/mcp.zig` 去掉测
 
 #### 7.3.5 MCP 返回值是不可信数据
 
-MCP 结果来自第三方 server,属外部内容。按 2.2.2 的结论包裹:**用随机 hex boundary id 配对**,并检测伪造的闭合标记(nullclaw `security/external_content.zig` 的 `matchSpoofedMarker` 是可照搬的形状),不要用 openfang 那种固定字符串标记。
+MCP 结果来自第三方 server,属外部内容,必须包裹后才进上下文。**openfang 的做法与 2.2.2 原文的描述不符,已实读更正**:它不是固定字符串标记,而是 `SHA256(url)` 前 6 字节派生的 `EXTCONTENT_{12位hex}`(`crates/openfang-runtime/src/web_content.rs:39-45` 的 `content_boundary`),包裹在 `wrap_external_content`(`:49-57`)。那是**确定性**的 —— 同一个 url 每次得到同一个 id。
+
+AutoBee 取**随机** hex boundary id:确定性 id 可被第三方预测,而 MCP server 的 url 就是它自己,它完全知道自己的 boundary 会是什么。再配合检测伪造的闭合标记(nullclaw `security/external_content.zig` 的 `matchSpoofedMarker` 是可照搬的形状)。
 
 
 ### 7.4 首次接入必做
@@ -663,7 +667,7 @@ MCP 结果来自第三方 server,属外部内容。按 2.2.2 的结论包裹:**�
 
 - [x] **M1-1 加两张表**(已完成 2026-09-24)
   - `credentials/schema.rs` 的 `CREATE`(现 20-35 行)追加 `llm_providers` / `llm_models` 两段 DDL,照 4.2 的 SQL。
-  - `VERSION`(现 `schema.rs:14`,值 4)加一到 5。**`migrate` 里 `from < 5` 不需要动作** —— 表是靠 `CREATE` 里的 `IF NOT EXISTS` 补的,老库缺表会在下次开库时建好;但版本号必须往前走,否则将来真要改写数据时无从判断这一版跑过没有。
+  - `VERSION` 加一。**原文写「现 `schema.rs:14`,值 4」已过期** —— 常量现在在 `schema.rs:9`,值 7(M1-1 推到 5,百度双 AK 列推到 6,会话三表推到 7)。**`migrate` 里不需要对应分支** —— 表是靠 `CREATE` 里的 `IF NOT EXISTS` 补的,老库缺表会在下次开库时建好;但版本号必须往前走,否则将来真要改写数据时无从判断这一版跑过没有。
   - 外键默认是关的,要开。开在 `schema::prepare` 里面(建表之前),**不要开在 `store.rs` 的 `open_at`**:`open_at`(`:40`)与测试用的 `memory()`(`:62`)是两条独立的打开路径,各自调一次 `prepare`(`:52`、`:65`)。只在 `open_at` 加,下面那条级联测试走 `memory()`,外键是关的,测试失败而生产是对的 —— 排查方向会被带偏。
   - 判据实测:`cargo test -p autobee-shell` 全绿 55 条。**反向验证做了**:把 `PRAGMA foreign_keys` 临时改成 `OFF`,两条新测试(级联删除、悬空 `provider_id` 被拒)双双 FAILED;改回 `ON` 全过。不做这一步的话,测试可能只是恰好通过而 `PRAGMA` 压根没生效。
 - [x] **M1-2 `llm/store.rs`**(已完成 2026-09-24)
@@ -711,13 +715,13 @@ MCP 结果来自第三方 server,属外部内容。按 2.2.2 的结论包裹:**�
 - [ ] **M3-1 `llm/tools.rs` 的 schema 与裁剪结构**
   - 三个 tool 的 JSON Schema 照 5.2 写:`plan_route` / `search_place` / `life_circle`。
   - `mode` / `sort` / `package` 的 enum 值**从 Rust 侧生成**,不手抄。手抄错一个值,模型收到的是反序列化失败,它会拿同一个错值重试到轮次上限(5.2)。
-  - `TravelMode::ALL`(`models.rs:160`)与 `SortBy::ALL`(`:185`)已有,直接用。**`LifeCirclePackage` 没有 `ALL`** —— 它只有 `parse`(`:344`),所以先给它补一个 `pub const ALL: [&'static str; 3] = ["care", "family", "emergency"]`,照前两个的形状写,再引用。不补就只能手抄,而手抄正是这条要避免的事。
+  - `TravelMode::ALL`(`models.rs:131`)、`SortBy::ALL`(`:151`)、`LifeCirclePackage::ALL`(`:281`)**三个都已存在**,直接用。原文「`LifeCirclePackage` 没有 `ALL`,要先补一个」是过期的 —— 实读已确认它在,这一条少一件事。
   - 裁剪结构按 5.4 单独定义:丢掉 `Segment.points`、`routes` 最多 3 条、`pois` 每类最多 5 个、`crs` **必须保留且不许 `skip_serializing_if`**。不复用前端 DTO。
   - 判据:单测「schema 里的 enum 值与 `TravelMode::ALL` 逐字相等」;单测「裁剪后的 JSON 里 `points` 字段不存在、`crs` 字段存在」。第二条是 5.3 那个静默偏差的唯一自动化防线。
 - [ ] **M3-2 `llm/agent.rs` 回合循环**
   - 轮次上限 5;达上限仍要求调工具则停下并告知用户,不无限循环。
   - tool 报错也回灌:`AppError` 的 `code` + 中文 `message` 直接序列化发回,让模型换参数重试(5.5)。
-  - **`stopReason == "length"` 时整批 tool call 作废,一个都不执行**,每个都作为错误回灌。照 pi `agent-loop.ts:468-482`。这条不做就会出现「参数被截在 `{"from":"孝陵卫","to":"南京南"`,补全后是个真实地名,算出一条去错地方的路线并自信报给用户」—— 5.5 记的那个无声错误。
+  - **`finish_reason == "length"` 时整批 tool call 作废,一个都不执行**,每个都作为错误回灌。照 pi `agent-loop.ts:262-270`(判断)与 `475-500`(处理),原文的 `468-482` 是过期行号。这条不做就会出现「参数被截在 `{"from":"孝陵卫","to":"南京南"`,补全后是个真实地名,算出一条去错地方的路线并自信报给用户」—— 5.5 记的那个无声错误。
   - `route-core` 是 blocking 的,tool 执行走 `spawn_blocking`,不改 core 为 async(1.2 非目标)。
   - 判据:单测三条 —— 轮次上限触发时返回那句提示而非继续循环;tool 返回 `Err` 时 messages 里出现 role=tool 的错误项;`stopReason == "length"` 时执行过的 tool 数为 0。第三条必须有,它是唯一能挡住那个无声错误的东西。
 - [ ] **M3-3 `http.rs` 加 tools 字段**
@@ -730,9 +734,14 @@ MCP 结果来自第三方 server,属外部内容。按 2.2.2 的结论包裹:**�
 
 ### M4 流式
 
-- [ ] **M4-1 提依赖**
-  - `tokio` / `futures-util` / `uuid` 从间接依赖提为直接依赖。三者已在 `Cargo.lock`,不新增 runtime。
-  - 判据:`cargo build` 通过,`cargo tree` 里没有第二个 async runtime。
+- [x] **M4-1 不提依赖:blocking + 手写 SSE**(2026-09-24 决定,推翻原文)
+  - 原文要求把 `tokio` / `futures-util` / `uuid` 提为直接依赖。**三条都不做**,理由是实读现状:
+    - `uuid`:`shell/src/credentials/store.rs` 的 `new_id()` 有明确注释说明为什么不引 uuid。提它等于反悔一个有理由的决定。
+    - `futures-util`:当前整个 workspace **零依赖**。引它只为 `bytes_stream()` 的 async SSE。
+    - `tokio`:当前没有任何 crate 直接依赖,只经 `tauri` 传递。
+  - 真正的理由:`core/src/http.rs` 整个是 `reqwest::blocking`,模块文档第 3-5 行写明「引 async 会把 `async` 传染到每个 adapter 与每个单测,换不来吞吐」。走 async SSE 会把地图侧几十个调用点一起拖进去。
+  - 改用:`reqwest::blocking::Response` 实现了 `std::io::Read`,在 `spawn_blocking` 里按块读;SSE 解析做成**纯状态机**(喂任意切分的字节块),跨 chunk 断行照样可测。已落地 `core/src/http.rs` 的 `post_stream`(返回未读 `Response`)与长超时客户端 `LLM_CLIENT`(600 秒 —— 地图的 10 秒对大模型是必然超时)。
+  - 判据实测:`cargo tree` 里没有第二个 async runtime,而且是因为压根没加。`route-core` clippy `-D warnings` 0 问题(确认 `Checking route-core` 真实重编,非缓存)。
 - [ ] **M4-2 SSE 解析**
   - `http.rs` 改 `bytes_stream` + 手写逐行解析。
   - 判据:单测喂一段真实 SSE 文本(含跨 chunk 切断的行),断言拼出的完整内容 —— 跨 chunk 断行是 SSE 手写解析唯一会错的地方,不测等于没写。

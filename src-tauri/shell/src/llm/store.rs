@@ -282,7 +282,9 @@ fn log_saved(id: &str, plain: &str) {
 }
 
 /// 不引 `uuid`：这里只要求「同一个库里不重复」，128 位随机 + 时间前缀已经够。
-fn new_id() -> String {
+///
+/// `pub(super)`：`llm::conversations` 建会话 id 也用它。两份实现会分叉。
+pub(super) fn new_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)

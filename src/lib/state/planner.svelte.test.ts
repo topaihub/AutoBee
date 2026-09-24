@@ -53,6 +53,15 @@ function fakeClient(overrides: Partial<PlannerClient> = {}): PlannerClient {
     deleteLlmProvider: vi.fn(async () => []),
     fetchLlmModels: vi.fn(async () => []),
     saveLlmModels: vi.fn(async () => []),
+    listConversations: vi.fn(async () => []),
+    readConversation: vi.fn(async () => []),
+    deleteConversation: vi.fn(async () => undefined),
+    chatStart: vi.fn(async () => "s0"),
+    chatCancel: vi.fn(async () => undefined),
+    listMcpServers: vi.fn(async () => []),
+    saveMcpServer: vi.fn(async () => []),
+    deleteMcpServer: vi.fn(async () => []),
+    listMcpTools: vi.fn(async () => []),
     ...overrides,
   };
 }

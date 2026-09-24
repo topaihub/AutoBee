@@ -220,3 +220,80 @@ export type LlmModelInput = {
   alias?: string | null;
   toolsOk?: boolean;
 };
+
+export type ChatRole = "system" | "user" | "assistant" | "tool";
+
+/** 一次对话。`updatedAt` 降序排列，两个时间戳都是 unix 秒。 */
+export type Conversation = {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+/**
+ * 一条消息。`toolCalls` 是原始 JSON 串而不是解析后的结构：界面只折叠显示它，
+ * 解析它等于在前端再实现一遍 OpenAI 的 tool call 形状，而那个形状由后端负责。
+ */
+export type ChatMessage = {
+  id: string;
+  convId: string;
+  role: ChatRole;
+  content: string;
+  toolCalls?: string | null;
+  toolName?: string | null;
+  model?: string | null;
+  createdAt: number;
+};
+
+/** 指定用哪个模型。两段都要：同一个模型标识可能挂在多个服务商下。 */
+export type ModelRef = {
+  providerId: string;
+  model: string;
+};
+
+/**
+ * 流式事件的载荷，事件名 `llm:chat:<streamId>`。
+ *
+ * `toolEnd` 上的 `plan` / `circle` 是**未裁剪**的原始结构，只给地图用，
+ * 不发回模型（§6.4.2 的两条路径）。`summary` 是给人看的一句话，
+ * 前端不该去解析它。
+ */
+export type ChatStreamEvent =
+  | { kind: "delta"; text: string }
+  | { kind: "toolStart"; tool: string; args: string }
+  | {
+      kind: "toolEnd";
+      tool: string;
+      ok: boolean;
+      summary: string;
+      plan?: RoutePlan | null;
+      circle?: LifeCircle | null;
+    }
+  | { kind: "done"; messageId: string }
+  | { kind: "error"; code: string; message: string };
+
+/** 一个 MCP server。`toolCount` 是上次成功 `tools/list` 拿到的条数，null = 还没连上过。 */
+export type McpServer = {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  toolCount?: number | null;
+};
+
+export type McpServerInput = {
+  /** null = 新建 */
+  id?: string | null;
+  name: string;
+  url: string;
+  enabled: boolean;
+};
+
+/** `list_mcp_tools` 的一项。`server` 是 server 的 name，用于界面分组。 */
+export type McpToolInfo = {
+  /** 带前缀的完整工具名，形如 `mcp_baidu_<tool>` */
+  name: string;
+  server: string;
+  description: string;
+};

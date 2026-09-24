@@ -7,6 +7,8 @@
  */
 import { invokeCmd } from "./tauri-client";
 import type {
+  ChatMessage,
+  Conversation,
   Crs,
   LifeCircle,
   LifeCirclePackage,
@@ -16,6 +18,10 @@ import type {
   LogEntry,
   MapProvider,
   MapProviderInput,
+  McpServer,
+  McpServerInput,
+  McpToolInfo,
+  ModelRef,
   Place,
   RoutePlan,
   Settings,
@@ -45,6 +51,19 @@ export interface PlannerClient {
   /** 真发一次 `GET {baseUrl}/models`，结果不落库。 */
   fetchLlmModels(id: string): Promise<string[]>;
   saveLlmModels(providerId: string, models: LlmModelInput[]): Promise<LlmProvider[]>;
+
+  listConversations(): Promise<Conversation[]>;
+  readConversation(id: string): Promise<ChatMessage[]>;
+  deleteConversation(id: string): Promise<void>;
+  /** 立即返回 streamId,内容走 `llm:chat:<streamId>` 事件 */
+  chatStart(convId: string | null, text: string, model: ModelRef): Promise<string>;
+  chatCancel(streamId: string): Promise<void>;
+
+  listMcpServers(): Promise<McpServer[]>;
+  saveMcpServer(input: McpServerInput): Promise<McpServer[]>;
+  deleteMcpServer(id: string): Promise<McpServer[]>;
+  /** 连上去跑一次 tools/list,不落库 */
+  listMcpTools(id: string): Promise<McpToolInfo[]>;
 }
 
 /** 真实实现：转发给 Tauri。 */
@@ -66,4 +85,13 @@ export const tauriPlannerClient: PlannerClient = {
   deleteLlmProvider: (id) => invokeCmd("delete_llm_provider", { id }),
   fetchLlmModels: (id) => invokeCmd("fetch_llm_models", { id }),
   saveLlmModels: (providerId, models) => invokeCmd("save_llm_models", { providerId, models }),
+  listConversations: () => invokeCmd("list_conversations"),
+  readConversation: (id) => invokeCmd("read_conversation", { id }),
+  deleteConversation: (id) => invokeCmd("delete_conversation", { id }),
+  chatStart: (convId, text, model) => invokeCmd("llm_chat_start", { convId, text, model }),
+  chatCancel: (streamId) => invokeCmd("llm_chat_cancel", { streamId }),
+  listMcpServers: () => invokeCmd("list_mcp_servers"),
+  saveMcpServer: (input) => invokeCmd("save_mcp_server", { input }),
+  deleteMcpServer: (id) => invokeCmd("delete_mcp_server", { id }),
+  listMcpTools: (id) => invokeCmd("list_mcp_tools", { id }),
 };

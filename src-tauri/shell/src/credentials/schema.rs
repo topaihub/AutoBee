@@ -6,7 +6,7 @@ use rusqlite::Connection;
 
 use crate::error::AppError;
 
-const VERSION: i64 = 6;
+const VERSION: i64 = 7;
 
 /// 建表 SQL。`IF NOT EXISTS` 让它可以在每次开库时无条件跑一遍。
 const CREATE: &str = "
@@ -44,6 +44,35 @@ CREATE TABLE IF NOT EXISTS llm_models (
   tools_ok    INTEGER NOT NULL DEFAULT 1,  -- 该模型是否支持 tool calling
   sort_order  INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (provider_id, model)
+);
+
+CREATE TABLE IF NOT EXISTS llm_conversations (
+  id         TEXT PRIMARY KEY,
+  title      TEXT    NOT NULL,        -- 取用户首句前 20 字
+  created_at INTEGER NOT NULL,        -- unix 秒
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS llm_messages (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  conv_id    TEXT    NOT NULL REFERENCES llm_conversations(id) ON DELETE CASCADE,
+  role       TEXT    NOT NULL,        -- system | user | assistant | tool
+  content    TEXT    NOT NULL,
+  tool_calls TEXT,                    -- assistant 轮的 tool_calls JSON，NULL = 纯文本
+  tool_name  TEXT,                    -- role='tool' 时哪个工具的结果
+  model      TEXT,                    -- 哪个模型生成的
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_llm_messages_conv
+  ON llm_messages(conv_id, created_at);
+
+CREATE TABLE IF NOT EXISTS mcp_servers (
+  id         TEXT PRIMARY KEY,
+  name       TEXT    NOT NULL,        -- 工具名前缀取它：mcp_<name>_<tool>
+  url        TEXT    NOT NULL,        -- Streamable HTTP 端点
+  enabled    INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0
 );
 ";
 

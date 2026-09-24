@@ -176,12 +176,7 @@ export class PlannerState {
     this.error = "";
     this.degradedNote = "";
     try {
-      this.plan = await this.client.planRoute(from, to, this.mode, this.sort);
-      this.selectedRouteId = this.routes[0]?.id ?? null;
-      if (this.plan.degraded) {
-        const tried = this.plan.degraded.tried.join("、");
-        this.degradedNote = `${tried} 暂不可用，本次结果来自备用服务商。`;
-      }
+      this.applyPlan(await this.client.planRoute(from, to, this.mode, this.sort));
     } catch (e) {
       this.plan = null;
       this.selectedRouteId = null;
@@ -189,6 +184,19 @@ export class PlannerState {
     } finally {
       this.loading = false;
     }
+  }
+
+  /**
+   * 把一份算好的方案写进状态。`run()` 与大模型工具调用共用这条路径 ——
+   * 直接赋值 `planner.plan` 会绕过选中项与降级文案，地图能画但卡片选不中。
+   */
+  applyPlan(plan: RoutePlan): void {
+    this.plan = plan;
+    this.selectedRouteId = this.routes[0]?.id ?? null;
+    this.error = "";
+    this.degradedNote = plan.degraded
+      ? `${plan.degraded.tried.join("、")} 暂不可用，本次结果来自备用服务商。`
+      : "";
   }
 
   /** 选中某个方案；卡片点击与地图上的联动都走这里。 */
