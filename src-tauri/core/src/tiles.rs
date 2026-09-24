@@ -28,7 +28,9 @@ pub const DEFAULT_TILE_SOURCE: &str = "arcgis-street";
 /// 瓦片的 URL 模板。返回 `None` 表示不认识这个源。
 fn template(source: &str) -> Option<&'static str> {
     match source {
-        "arcgis-street" => Some("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"),
+        "arcgis-street" => Some(
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+        ),
         _ => None,
     }
 }
@@ -39,11 +41,20 @@ fn template(source: &str) -> Option<&'static str> {
 /// 源名不认识、或 z/x/y 越界时返回错误。越界要拦在发请求之前 ——
 /// 不然会对着一个不存在的瓦片发一堆 404，而那些 404 看起来像服务挂了。
 pub fn tile_url(source: &str, z: u8, x: u32, y: u32) -> Result<String, AppError> {
-    let tpl = template(source)
-        .ok_or_else(|| AppError::new("UNKNOWN_TILE_SOURCE", format!("不认识的瓦片源 {source}"), 400))?;
+    let tpl = template(source).ok_or_else(|| {
+        AppError::new(
+            "UNKNOWN_TILE_SOURCE",
+            format!("不认识的瓦片源 {source}"),
+            400,
+        )
+    })?;
 
     if z > 19 {
-        return Err(AppError::new("TILE_OUT_OF_RANGE", format!("缩放级别 {z} 超出范围"), 400));
+        return Err(AppError::new(
+            "TILE_OUT_OF_RANGE",
+            format!("缩放级别 {z} 超出范围"),
+            400,
+        ));
     }
     let max = 1u32 << z;
     if x >= max || y >= max {
@@ -61,7 +72,10 @@ pub fn tile_url(source: &str, z: u8, x: u32, y: u32) -> Result<String, AppError>
 
 /// 缓存文件的路径。
 fn cache_path(cache_dir: &Path, source: &str, z: u8, x: u32, y: u32) -> PathBuf {
-    cache_dir.join(source).join(z.to_string()).join(format!("{x}_{y}.png"))
+    cache_dir
+        .join(source)
+        .join(z.to_string())
+        .join(format!("{x}_{y}.png"))
 }
 
 /// 取一块瓦片。命中磁盘缓存就直接返回，否则下载后写入缓存。
@@ -71,7 +85,13 @@ fn cache_path(cache_dir: &Path, source: &str, z: u8, x: u32, y: u32) -> PathBuf 
 /// 参数非法、下载失败、或下载到空内容时返回错误。
 /// 写缓存失败**不算错误** —— 缓存只是加速，写不进（只读目录、磁盘满）时
 /// 照样要能把图返回给用户。
-pub fn fetch_tile(cache_dir: &Path, source: &str, z: u8, x: u32, y: u32) -> Result<Vec<u8>, AppError> {
+pub fn fetch_tile(
+    cache_dir: &Path,
+    source: &str,
+    z: u8,
+    x: u32,
+    y: u32,
+) -> Result<Vec<u8>, AppError> {
     let path = cache_path(cache_dir, source, z, x, y);
     if let Ok(bytes) = fs::read(&path)
         && !bytes.is_empty()
@@ -98,13 +118,17 @@ pub fn fetch_tile(cache_dir: &Path, source: &str, z: u8, x: u32, y: u32) -> Resu
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "测试里断言失败即测试失败")]
 mod tests {
     use super::*;
 
     #[test]
     fn 拼出_arcgis_街道_url() {
         let url = tile_url("arcgis-street", 12, 3349, 1683).unwrap();
-        assert_eq!(url, "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/12/1683/3349");
+        assert_eq!(
+            url,
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/12/1683/3349"
+        );
     }
 
     #[test]
@@ -139,5 +163,4 @@ mod tests {
         assert_eq!(TILE_SOURCES.len(), 1);
         assert!(tile_url(TILE_SOURCES[0].0, 0, 0, 0).is_ok());
     }
-
 }

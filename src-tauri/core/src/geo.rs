@@ -107,7 +107,11 @@ pub fn convert(p: LatLng, from: Crs, to: Crs) -> LatLng {
         return p;
     }
     // CGCS2000 与 WGS84 视作等同。
-    let f = if from == Crs::Cgcs2000 { Crs::Wgs84 } else { from };
+    let f = if from == Crs::Cgcs2000 {
+        Crs::Wgs84
+    } else {
+        from
+    };
     let t = if to == Crs::Cgcs2000 { Crs::Wgs84 } else { to };
     if f == t {
         return p;
@@ -153,7 +157,11 @@ mod tests {
     fn gcj02_转回_wgs84_的往返误差在米内() {
         let wgs = LatLng::new(39.908_68, 116.395_30);
         let back = gcj02_to_wgs84(wgs84_to_gcj02(wgs));
-        assert!(wgs.haversine_m(back) < 1.0, "往返误差 {}", wgs.haversine_m(back));
+        assert!(
+            wgs.haversine_m(back) < 1.0,
+            "往返误差 {}",
+            wgs.haversine_m(back)
+        );
     }
 
     #[test]

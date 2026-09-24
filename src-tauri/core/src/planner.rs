@@ -58,20 +58,19 @@ fn rough_country(l: LatLng) -> Option<String> {
         .then(|| "CN".to_string())
 }
 
-
 /// 用某个 provider 解析地点文本。
 ///
 /// **顺序必须是 suggestion → geocode**。geocoder 对 POI 式输入会报 348
 /// （实测「光谷大道地铁站」「铢家村-E1口」都是这个码），先问它就白跑一趟。
-fn resolve_on(
-    provider: &dyn RouteProvider,
-    text: &str,
-) -> Result<Resolved, AppError> {
+fn resolve_on(provider: &dyn RouteProvider, text: &str) -> Result<Resolved, AppError> {
     let crs = crate::registry::get_meta(provider.id())
         .map(|m| m.coord_sys)
         .unwrap_or(Crs::Wgs84);
 
-    let mut place: Option<Place> = provider.suggest(text, 1).ok().and_then(|hits| hits.into_iter().next());
+    let mut place: Option<Place> = provider
+        .suggest(text, 1)
+        .ok()
+        .and_then(|hits| hits.into_iter().next());
     if place.is_none() {
         place = provider.geocode(text).ok().flatten();
     }
@@ -108,7 +107,10 @@ pub fn convert_plan(plan: RoutePlan, to: Crs) -> RoutePlan {
             .routes
             .into_iter()
             .map(|r| crate::models::Route {
-                bounds: [convert(r.bounds[0], from, to), convert(r.bounds[1], from, to)],
+                bounds: [
+                    convert(r.bounds[0], from, to),
+                    convert(r.bounds[1], from, to),
+                ],
                 segments: r
                     .segments
                     .into_iter()
@@ -306,21 +308,34 @@ pub fn geocode_place(config: &Config, address: &str) -> Option<Place> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "测试里断言失败即测试失败")]
 mod tests {
     use super::*;
 
     #[test]
     fn 坐标粗判中国境内() {
-        assert_eq!(rough_country(LatLng::new(30.5, 114.4)), Some("CN".to_string()));
-        assert_eq!(rough_country(LatLng::new(35.68, 139.76)), None, "东京不在框内");
+        assert_eq!(
+            rough_country(LatLng::new(30.5, 114.4)),
+            Some("CN".to_string())
+        );
+        assert_eq!(
+            rough_country(LatLng::new(35.68, 139.76)),
+            None,
+            "东京不在框内"
+        );
     }
-
 
     #[test]
     fn 坐标转_plan_会换掉所有点() {
         let plan = RoutePlan {
-            origin: Endpoint { title: "a".into(), location: LatLng::new(30.5, 114.4) },
-            destination: Endpoint { title: "b".into(), location: LatLng::new(30.6, 114.5) },
+            origin: Endpoint {
+                title: "a".into(),
+                location: LatLng::new(30.5, 114.4),
+            },
+            destination: Endpoint {
+                title: "b".into(),
+                location: LatLng::new(30.6, 114.5),
+            },
             mode: TravelMode::Subway,
             routes: vec![crate::models::Route {
                 id: "r0".into(),
@@ -354,8 +369,14 @@ mod tests {
     #[test]
     fn 同坐标系转换返回原值() {
         let plan = RoutePlan {
-            origin: Endpoint { title: "a".into(), location: LatLng::new(30.5, 114.4) },
-            destination: Endpoint { title: "b".into(), location: LatLng::new(30.6, 114.5) },
+            origin: Endpoint {
+                title: "a".into(),
+                location: LatLng::new(30.5, 114.4),
+            },
+            destination: Endpoint {
+                title: "b".into(),
+                location: LatLng::new(30.6, 114.5),
+            },
             mode: TravelMode::Walking,
             routes: vec![],
             provider: ProviderId::Tencent,

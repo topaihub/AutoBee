@@ -81,7 +81,10 @@ impl CircuitBreaker {
     /// 当前状态，测试用。
     #[must_use]
     pub fn fails_of(&self, id: ProviderId) -> u32 {
-        self.states.lock().map(|g| g.get(&id).map_or(0, |s| s.fails)).unwrap_or(0)
+        self.states
+            .lock()
+            .map(|g| g.get(&id).map_or(0, |s| s.fails))
+            .unwrap_or(0)
     }
 }
 

@@ -79,7 +79,10 @@ struct PhotonProperties {
 /// Photon 主查询。任何一步失败都返回 `None` —— 这是「判不出国家」而不是错误，
 /// 调用方会退化成顺序探测。
 fn try_photon(query: &str) -> Option<GlobalHit> {
-    let url = format!("https://photon.komoot.io/api/?q={}&limit=1", encode_component(query));
+    let url = format!(
+        "https://photon.komoot.io/api/?q={}&limit=1",
+        encode_component(query)
+    );
     let response: PhotonResponse = get_json(&url).ok()?;
     let feature = response.features.into_iter().next()?;
     let coords = feature.geometry?.coordinates;
@@ -92,7 +95,10 @@ fn try_photon(query: &str) -> Option<GlobalHit> {
     let props = feature.properties?;
     Some(GlobalHit {
         location: LatLng::new(lat, lng),
-        country_code: props.countrycode.map(|c| c.to_uppercase()).filter(|c| !c.is_empty()),
+        country_code: props
+            .countrycode
+            .map(|c| c.to_uppercase())
+            .filter(|c| !c.is_empty()),
         country: props.country,
         name: props.name.or(props.city),
         source: "photon",
@@ -122,7 +128,10 @@ fn try_nominatim(query: &str) -> Option<GlobalHit> {
             .and_then(|a| a.get("country"))
             .and_then(Value::as_str)
             .map(str::to_string),
-        name: first.get("display_name").and_then(Value::as_str).map(str::to_string),
+        name: first
+            .get("display_name")
+            .and_then(Value::as_str)
+            .map(str::to_string),
         source: "nominatim",
     })
 }

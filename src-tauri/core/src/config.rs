@@ -61,7 +61,10 @@ impl Config {
     /// 取某家的 Key。没配返回 `None`。
     #[must_use]
     pub fn key(&self, id: ProviderId) -> Option<&str> {
-        self.keys.get(&id).map(String::as_str).filter(|k| !k.is_empty())
+        self.keys
+            .get(&id)
+            .map(String::as_str)
+            .filter(|k| !k.is_empty())
     }
 
     /// 这家能不能用：配了 Key 且没被用户关掉。

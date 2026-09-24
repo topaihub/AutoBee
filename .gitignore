@@ -7,6 +7,9 @@
 /build/
 .svelte-kit/
 src-tauri/target/
+# 仓库根没有 Cargo.toml(workspace 根在 src-tauri/),这个 target/ 是
+# rust-analyzer 的 flycheck 产物。上一条锚定了 src-tauri/,挡不住它。
+/target/
 
 # Tauri 每次构建都会重新生成（由 tauri.conf.json + capabilities/ 推出来）
 src-tauri/gen/schemas/

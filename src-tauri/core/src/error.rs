@@ -36,11 +36,7 @@ impl AppError {
 
     /// 上游厂商返回了非 0 状态。
     pub fn upstream(provider: &str, detail: &str) -> Self {
-        Self::new(
-            "UPSTREAM",
-            format!("{provider} 返回错误：{detail}"),
-            502,
-        )
+        Self::new("UPSTREAM", format!("{provider} 返回错误：{detail}"), 502)
     }
 
     /// 地点解析不出来。
@@ -83,18 +79,17 @@ impl AppError {
     pub fn all_failed(tried: &[String], detail: &str) -> Self {
         Self::new(
             "ALL_PROVIDERS_FAILED",
-            format!("所有地图服务都失败了（已尝试：{}）。{detail}", tried.join("、")),
+            format!(
+                "所有地图服务都失败了（已尝试：{}）。{detail}",
+                tried.join("、")
+            ),
             502,
         )
     }
 
     /// 该厂商的 adapter 还没实现。planner 会跳过而不是报错。
     pub fn not_implemented(provider: &str) -> Self {
-        Self::new(
-            "NOT_IMPLEMENTED",
-            format!("{provider} 的接入还没实现"),
-            501,
-        )
+        Self::new("NOT_IMPLEMENTED", format!("{provider} 的接入还没实现"), 501)
     }
 
     /// 网络层失败。

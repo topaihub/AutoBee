@@ -6,12 +6,12 @@
 use serde_json::Value;
 
 use super::{RouteProvider, RouteRequest};
-use crate::decode::{subway_color, BUS_COLOR};
+use crate::decode::{BUS_COLOR, subway_color};
 use crate::error::AppError;
 use crate::http::{encode_component, get_json};
 use crate::models::{
-    Crs, Endpoint, LatLng, Place, ProviderId, Route, RoutePlan, Segment, SegmentKind, SortBy,
-    Stop, TransitLine, TravelMode, Vehicle,
+    Crs, Endpoint, LatLng, Place, ProviderId, Route, RoutePlan, Segment, SegmentKind, SortBy, Stop,
+    TransitLine, TravelMode, Vehicle,
 };
 
 const BASE: &str = "https://restapi.amap.com";
@@ -49,18 +49,25 @@ fn minutes(seconds: u32) -> u32 {
 
 fn point(text: &str) -> Option<LatLng> {
     let (lng, lat) = text.split_once(',')?;
-    Some(LatLng::new(lat.trim().parse().ok()?, lng.trim().parse().ok()?))
+    Some(LatLng::new(
+        lat.trim().parse().ok()?,
+        lng.trim().parse().ok()?,
+    ))
 }
 
 fn points(text: Option<&str>) -> Vec<LatLng> {
-    text.unwrap_or_default().split(';').filter_map(point).collect()
+    text.unwrap_or_default()
+        .split(';')
+        .filter_map(point)
+        .collect()
 }
 
 fn bounds(points: &[LatLng], fallback: [LatLng; 2]) -> [LatLng; 2] {
     let Some(first) = points.first().copied() else {
         return fallback;
     };
-    let (mut min_lat, mut max_lat, mut min_lng, mut max_lng) = (first.lat, first.lat, first.lng, first.lng);
+    let (mut min_lat, mut max_lat, mut min_lng, mut max_lng) =
+        (first.lat, first.lat, first.lng, first.lng);
     for point in points.iter().skip(1) {
         min_lat = min_lat.min(point.lat);
         max_lat = max_lat.max(point.lat);
@@ -78,20 +85,29 @@ fn ensure_ok(value: &Value, service: &str) -> Result<(), AppError> {
     if value.get("status").and_then(Value::as_str) == Some("1") {
         return Ok(());
     }
-    Err(AppError::upstream(service, text(value, "info").as_deref().unwrap_or("未知错误")))
+    Err(AppError::upstream(
+        service,
+        text(value, "info").as_deref().unwrap_or("未知错误"),
+    ))
 }
 
 fn stop(value: Option<&Value>) -> Stop {
     let value = value.unwrap_or(&Value::Null);
     Stop {
         title: text(value, "name").unwrap_or_default(),
-        location: text(value, "location").and_then(|value| point(&value)).unwrap_or(LatLng::new(0.0, 0.0)),
+        location: text(value, "location")
+            .and_then(|value| point(&value))
+            .unwrap_or(LatLng::new(0.0, 0.0)),
         exit: None,
     }
 }
 
 fn city_code(key: &str, from: LatLng) -> Result<String, AppError> {
-    let url = format!("{BASE}/v3/geocode/regeo?location={}&key={}", location(from), key);
+    let url = format!(
+        "{BASE}/v3/geocode/regeo?location={}&key={}",
+        location(from),
+        key
+    );
     let response: Value = get_json(&url)?;
     ensure_ok(&response, "高德逆地理编码")?;
     response
@@ -110,12 +126,19 @@ fn walking(response: &Value, sort: SortBy, fallback: [LatLng; 2]) -> Vec<Route> 
         .flatten()
         .enumerate()
         .map(|(index, path)| {
-            let steps = path.get("steps").and_then(Value::as_array).cloned().unwrap_or_default();
+            let steps = path
+                .get("steps")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
             let all_points: Vec<LatLng> = steps
                 .iter()
                 .flat_map(|step| points(text(step, "polyline").as_deref()))
                 .collect();
-            let instructions = steps.iter().filter_map(|step| text(step, "instruction")).collect();
+            let instructions = steps
+                .iter()
+                .filter_map(|step| text(step, "instruction"))
+                .collect();
             let distance = number(path, "distance");
             let duration = minutes(number(path, "duration"));
             Route {
@@ -135,7 +158,13 @@ fn walking(response: &Value, sort: SortBy, fallback: [LatLng; 2]) -> Vec<Route> 
             }
         })
         .collect();
-    routes.sort_by_key(|route| if sort == SortBy::Distance { route.distance } else { route.duration });
+    routes.sort_by_key(|route| {
+        if sort == SortBy::Distance {
+            route.distance
+        } else {
+            route.duration
+        }
+    });
     routes
 }
 
@@ -149,7 +178,12 @@ fn transit(response: &Value, mode: TravelMode, sort: SortBy, fallback: [LatLng; 
         .map(|(index, transit)| {
             let mut segments = Vec::new();
             let mut subway_index = 0;
-            for raw in transit.get("segments").and_then(Value::as_array).into_iter().flatten() {
+            for raw in transit
+                .get("segments")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
                 let walking = raw.get("walking").unwrap_or(&Value::Null);
                 let walking_points: Vec<LatLng> = walking
                     .get("steps")
@@ -196,7 +230,11 @@ fn transit(response: &Value, mode: TravelMode, sort: SortBy, fallback: [LatLng; 
                         points: points(text(line, "polyline").as_deref()),
                         instruction: Vec::new(),
                         line: Some(TransitLine {
-                            vehicle: if is_subway { Vehicle::Subway } else { Vehicle::Bus },
+                            vehicle: if is_subway {
+                                Vehicle::Subway
+                            } else {
+                                Vehicle::Bus
+                            },
                             title: text(line, "name").unwrap_or_default(),
                             station_count: number(line, "via_num"),
                             color,
@@ -209,23 +247,44 @@ fn transit(response: &Value, mode: TravelMode, sort: SortBy, fallback: [LatLng; 
                     });
                 }
             }
-            let all_points: Vec<LatLng> = segments.iter().flat_map(|segment| segment.points.iter().copied()).collect();
+            let all_points: Vec<LatLng> = segments
+                .iter()
+                .flat_map(|segment| segment.points.iter().copied())
+                .collect();
             Route {
                 id: format!("r{index}"),
                 distance: segments.iter().map(|segment| segment.distance).sum(),
                 duration: minutes(number(transit, "duration")),
-                price: text(transit, "cost").and_then(|value| value.parse().ok()).unwrap_or(0.0),
+                price: text(transit, "cost")
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(0.0),
                 bounds: bounds(&all_points, fallback),
                 segments,
             }
         })
         .collect();
     routes.retain(|route| match mode {
-        TravelMode::Subway => route.segments.iter().any(|segment| segment.line.as_ref().is_some_and(|line| line.vehicle == Vehicle::Subway)),
-        TravelMode::Bus => route.segments.iter().any(|segment| segment.line.as_ref().is_some_and(|line| line.vehicle == Vehicle::Bus)),
+        TravelMode::Subway => route.segments.iter().any(|segment| {
+            segment
+                .line
+                .as_ref()
+                .is_some_and(|line| line.vehicle == Vehicle::Subway)
+        }),
+        TravelMode::Bus => route.segments.iter().any(|segment| {
+            segment
+                .line
+                .as_ref()
+                .is_some_and(|line| line.vehicle == Vehicle::Bus)
+        }),
         TravelMode::Walking => false,
     });
-    routes.sort_by_key(|route| if sort == SortBy::Distance { route.distance } else { route.duration });
+    routes.sort_by_key(|route| {
+        if sort == SortBy::Distance {
+            route.distance
+        } else {
+            route.duration
+        }
+    });
     routes
 }
 
@@ -235,7 +294,11 @@ impl RouteProvider for AmapProvider {
     }
 
     fn suggest(&self, keyword: &str, page_size: usize) -> Result<Vec<Place>, AppError> {
-        let url = format!("{BASE}/v3/assistant/inputtips?keywords={}&datatype=poi&key={}", encode_component(keyword), self.key);
+        let url = format!(
+            "{BASE}/v3/assistant/inputtips?keywords={}&datatype=poi&key={}",
+            encode_component(keyword),
+            self.key
+        );
         let response: Value = get_json(&url)?;
         ensure_ok(&response, "高德输入提示")?;
         Ok(response
@@ -258,16 +321,26 @@ impl RouteProvider for AmapProvider {
     }
 
     fn geocode(&self, address: &str) -> Result<Option<Place>, AppError> {
-        let url = format!("{BASE}/v3/geocode/geo?address={}&key={}", encode_component(address), self.key);
+        let url = format!(
+            "{BASE}/v3/geocode/geo?address={}&key={}",
+            encode_component(address),
+            self.key
+        );
         let response: Value = get_json(&url)?;
         ensure_ok(&response, "高德地理编码")?;
-        let Some(item) = response.get("geocodes").and_then(Value::as_array).and_then(|items| items.first()) else {
+        let Some(item) = response
+            .get("geocodes")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+        else {
             return Ok(None);
         };
         Ok(Some(Place {
             title: address.to_string(),
             address: text(item, "formatted_address"),
-            location: text(item, "location").and_then(|value| point(&value)).ok_or_else(|| AppError::upstream("高德地理编码", "响应缺少坐标"))?,
+            location: text(item, "location")
+                .and_then(|value| point(&value))
+                .ok_or_else(|| AppError::upstream("高德地理编码", "响应缺少坐标"))?,
             adcode: text(item, "adcode"),
             provider: ProviderId::Amap,
             id: None,
@@ -279,14 +352,20 @@ impl RouteProvider for AmapProvider {
         let from = location(req.from);
         let to = location(req.to);
         let routes = if req.mode == TravelMode::Walking {
-            let url = format!("{BASE}/v3/direction/walking?origin={from}&destination={to}&key={}", self.key);
+            let url = format!(
+                "{BASE}/v3/direction/walking?origin={from}&destination={to}&key={}",
+                self.key
+            );
             let response: Value = get_json(&url)?;
             ensure_ok(&response, "高德步行路径规划")?;
             walking(&response, req.sort, fallback)
         } else {
             let city = city_code(&self.key, req.from)?;
             let strategy = if req.mode == TravelMode::Subway { 0 } else { 5 };
-            let url = format!("{BASE}/v3/direction/transit/integrated?origin={from}&destination={to}&city={city}&strategy={strategy}&extensions=all&key={}", self.key);
+            let url = format!(
+                "{BASE}/v3/direction/transit/integrated?origin={from}&destination={to}&city={city}&strategy={strategy}&extensions=all&key={}",
+                self.key
+            );
             let response: Value = get_json(&url)?;
             ensure_ok(&response, "高德公交路径规划")?;
             transit(&response, req.mode, req.sort, fallback)
@@ -295,8 +374,14 @@ impl RouteProvider for AmapProvider {
             return Err(AppError::no_route());
         }
         Ok(RoutePlan {
-            origin: Endpoint { title: req.from_title.clone().unwrap_or_else(|| "起点".to_string()), location: req.from },
-            destination: Endpoint { title: req.to_title.clone().unwrap_or_else(|| "终点".to_string()), location: req.to },
+            origin: Endpoint {
+                title: req.from_title.clone().unwrap_or_else(|| "起点".to_string()),
+                location: req.from,
+            },
+            destination: Endpoint {
+                title: req.to_title.clone().unwrap_or_else(|| "终点".to_string()),
+                location: req.to,
+            },
             mode: req.mode,
             routes,
             provider: ProviderId::Amap,

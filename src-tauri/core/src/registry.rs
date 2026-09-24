@@ -72,7 +72,11 @@ pub const PROVIDERS: &[ProviderMeta] = &[
     ProviderMeta {
         id: ProviderId::Tencent,
         coverage: Coverage::Countries(&["CN"]),
-        capabilities: Capabilities { transit: true, subway_filter: false, walking: true },
+        capabilities: Capabilities {
+            transit: true,
+            subway_filter: false,
+            walking: true,
+        },
         coord_sys: Crs::Gcj02,
         priority: 1,
         key_apply_url: "https://lbs.qq.com/dev/console/application/mine",
@@ -80,7 +84,11 @@ pub const PROVIDERS: &[ProviderMeta] = &[
     ProviderMeta {
         id: ProviderId::Amap,
         coverage: Coverage::Countries(&["CN"]),
-        capabilities: Capabilities { transit: true, subway_filter: false, walking: true },
+        capabilities: Capabilities {
+            transit: true,
+            subway_filter: false,
+            walking: true,
+        },
         coord_sys: Crs::Gcj02,
         priority: 2,
         key_apply_url: "https://console.amap.com/dev/key/app",
@@ -90,7 +98,11 @@ pub const PROVIDERS: &[ProviderMeta] = &[
     ProviderMeta {
         id: ProviderId::Tianditu,
         coverage: Coverage::Countries(&["CN"]),
-        capabilities: Capabilities { transit: true, subway_filter: true, walking: true },
+        capabilities: Capabilities {
+            transit: true,
+            subway_filter: true,
+            walking: true,
+        },
         coord_sys: Crs::Cgcs2000,
         priority: 3,
         key_apply_url: "https://console.tianditu.gov.cn/api/key",
@@ -98,7 +110,11 @@ pub const PROVIDERS: &[ProviderMeta] = &[
     ProviderMeta {
         id: ProviderId::Baidu,
         coverage: Coverage::Countries(&["CN"]),
-        capabilities: Capabilities { transit: true, subway_filter: false, walking: true },
+        capabilities: Capabilities {
+            transit: true,
+            subway_filter: false,
+            walking: true,
+        },
         coord_sys: Crs::Bd09,
         priority: 4,
         key_apply_url: "https://lbsyun.baidu.com/apiconsole/key",
@@ -106,7 +122,11 @@ pub const PROVIDERS: &[ProviderMeta] = &[
     ProviderMeta {
         id: ProviderId::Here,
         coverage: Coverage::Global,
-        capabilities: Capabilities { transit: true, subway_filter: true, walking: true },
+        capabilities: Capabilities {
+            transit: true,
+            subway_filter: true,
+            walking: true,
+        },
         coord_sys: Crs::Wgs84,
         priority: 1,
         key_apply_url: "https://platform.here.com/admin/apps",
@@ -114,11 +134,15 @@ pub const PROVIDERS: &[ProviderMeta] = &[
     ProviderMeta {
         id: ProviderId::Google,
         coverage: Coverage::Global,
-        capabilities: Capabilities { transit: true, subway_filter: false, walking: true },
+        capabilities: Capabilities {
+            transit: true,
+            subway_filter: false,
+            walking: true,
+        },
         coord_sys: Crs::Wgs84,
         priority: 2,
         key_apply_url: "https://console.cloud.google.com/google/maps-apis/credentials",
-    }
+    },
 ];
 
 /// 查一家的元数据。
@@ -147,7 +171,11 @@ fn needs(mode: TravelMode) -> fn(&Capabilities) -> bool {
 /// `country` 为 `None`（阶段一没拿到国家码）时不按地区过滤，退化成
 /// 「所有配了 Key 且支持该方式的」，由调用方顺序探测。
 #[must_use]
-pub fn resolve_providers(country: Option<&str>, mode: TravelMode, config: &Config) -> Vec<ProviderId> {
+pub fn resolve_providers(
+    country: Option<&str>,
+    mode: TravelMode,
+    config: &Config,
+) -> Vec<ProviderId> {
     let want = needs(mode);
     let mut pool: Vec<ProviderMeta> = PROVIDERS
         .iter()
@@ -156,7 +184,11 @@ pub fn resolve_providers(country: Option<&str>, mode: TravelMode, config: &Confi
         .collect();
 
     if let Some(cc) = country {
-        let hit: Vec<ProviderMeta> = pool.iter().copied().filter(|p| p.coverage.covers(cc)).collect();
+        let hit: Vec<ProviderMeta> = pool
+            .iter()
+            .copied()
+            .filter(|p| p.coverage.covers(cc))
+            .collect();
         // 一个都没命中（例如只配了海外 Key 却要算国内）时放宽到全部已配置的 ——
         // 让请求真的发出去拿到厂商的错误，好过在本地质疑「没有可用服务」。
         if !hit.is_empty() {
@@ -242,7 +274,10 @@ mod tests {
     #[test]
     fn 国家码未知时不过滤地区() {
         let config = config_with(&[ProviderId::Tencent, ProviderId::Here]);
-        assert_eq!(resolve_providers(None, TravelMode::Subway, &config).len(), 2);
+        assert_eq!(
+            resolve_providers(None, TravelMode::Subway, &config).len(),
+            2
+        );
     }
 
     #[test]

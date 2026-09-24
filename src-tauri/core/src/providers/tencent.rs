@@ -15,7 +15,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{RouteProvider, RouteRequest};
-use crate::decode::{decode_polyline, subway_color, BUS_COLOR};
+use crate::decode::{BUS_COLOR, decode_polyline, subway_color};
 use crate::error::AppError;
 use crate::http::{encode_component, get_json};
 use crate::models::{
@@ -74,7 +74,10 @@ fn f64_of(value: &Value, key: &str) -> Option<f64> {
 }
 
 fn u32_of(value: &Value, key: &str) -> u32 {
-    value.get(key).and_then(Value::as_f64).map_or(0, |v| v.max(0.0) as u32)
+    value
+        .get(key)
+        .and_then(Value::as_f64)
+        .map_or(0, |v| v.max(0.0) as u32)
 }
 
 fn latlng_of(value: &Value) -> Option<LatLng> {
@@ -131,7 +134,11 @@ fn bounds_of(points: &[LatLng], fallback: [LatLng; 2]) -> [LatLng; 2] {
 
 fn stop_of(value: Option<&Value>) -> Stop {
     let Some(v) = value else {
-        return Stop { title: String::new(), location: LatLng::new(0.0, 0.0), exit: None };
+        return Stop {
+            title: String::new(),
+            location: LatLng::new(0.0, 0.0),
+            exit: None,
+        };
     };
     let exit = v
         .get("exit")
@@ -239,7 +246,11 @@ fn normalize_transit(raw: &[Value], mode: TravelMode, sort: crate::models::SortB
                             points: decode_polyline(&polyline_of(line)),
                             instruction: Vec::new(),
                             line: Some(TransitLine {
-                                vehicle: if is_subway { Vehicle::Subway } else { Vehicle::Bus },
+                                vehicle: if is_subway {
+                                    Vehicle::Subway
+                                } else {
+                                    Vehicle::Bus
+                                },
                                 title: str_of(line, "title").unwrap_or_default(),
                                 station_count: u32_of(line, "station_count"),
                                 color,
@@ -256,11 +267,11 @@ fn normalize_transit(raw: &[Value], mode: TravelMode, sort: crate::models::SortB
                 }
             }
 
-            let all_points: Vec<LatLng> = segments.iter().flat_map(|s| s.points.iter().copied()).collect();
-            let fallback = [
-                LatLng::new(0.0, 0.0),
-                LatLng::new(0.0, 0.0),
-            ];
+            let all_points: Vec<LatLng> = segments
+                .iter()
+                .flat_map(|s| s.points.iter().copied())
+                .collect();
+            let fallback = [LatLng::new(0.0, 0.0), LatLng::new(0.0, 0.0)];
 
             Route {
                 id: format!("r{index}"),
@@ -291,10 +302,7 @@ fn normalize_walking(raw: &[Value], sort: crate::models::SortBy) -> Vec<Route> {
         .enumerate()
         .map(|(index, r)| {
             let points = decode_polyline(&polyline_of(r));
-            let bounds = bounds_of(
-                &points,
-                [LatLng::new(0.0, 0.0), LatLng::new(0.0, 0.0)],
-            );
+            let bounds = bounds_of(&points, [LatLng::new(0.0, 0.0), LatLng::new(0.0, 0.0)]);
             Route {
                 id: format!("r{index}"),
                 distance: u32_of(r, "distance"),
@@ -397,7 +405,10 @@ impl RouteProvider for TencentProvider {
         };
 
         let routes = if req.mode == TravelMode::Walking {
-            let url = format!("{BASE}/ws/direction/v1/walking?from={from}&to={to}&key={}", self.key);
+            let url = format!(
+                "{BASE}/ws/direction/v1/walking?from={from}&to={to}&key={}",
+                self.key
+            );
             let envelope: Envelope = get_json(&url)?;
             if envelope.status != 0 {
                 return Err(AppError::upstream("腾讯步行路线规划", &envelope.message));

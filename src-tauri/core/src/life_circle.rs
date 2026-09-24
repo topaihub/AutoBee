@@ -23,14 +23,25 @@ fn categories(package: LifeCirclePackage) -> &'static [&'static str] {
 }
 
 fn point(value: &Value) -> Option<LatLng> {
-    Some(LatLng::new(value.get("lat")?.as_f64()?, value.get("lng")?.as_f64()?))
+    Some(LatLng::new(
+        value.get("lat")?.as_f64()?,
+        value.get("lng")?.as_f64()?,
+    ))
 }
 
 fn text(value: &Value, key: &str) -> Option<String> {
-    value.get(key)?.as_str().filter(|text| !text.is_empty()).map(str::to_owned)
+    value
+        .get(key)?
+        .as_str()
+        .filter(|text| !text.is_empty())
+        .map(str::to_owned)
 }
 
-fn search(key: &str, origin: LatLng, category: &str) -> Result<Vec<(String, String, LatLng)>, AppError> {
+fn search(
+    key: &str,
+    origin: LatLng,
+    category: &str,
+) -> Result<Vec<(String, String, LatLng)>, AppError> {
     let url = format!(
         "{PLACE_URL}?query={}&location={:.6},{:.6}&radius={RADIUS_M}&scope=2&page_size={CANDIDATES_PER_CATEGORY}&output=json&ak={}",
         encode_component(category),
@@ -55,7 +66,13 @@ fn search(key: &str, origin: LatLng, category: &str) -> Result<Vec<(String, Stri
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|item| Some((text(item, "name")?, text(item, "address").unwrap_or_default(), point(item.get("location")?)?)))
+        .filter_map(|item| {
+            Some((
+                text(item, "name")?,
+                text(item, "address").unwrap_or_default(),
+                point(item.get("location")?)?,
+            ))
+        })
         .collect();
     tracing::debug!(category, count = found.len(), "百度地点检索返回候选");
     Ok(found)
@@ -80,7 +97,9 @@ fn walking(key: &str, origin: LatLng, destination: LatLng) -> Result<(u32, u32),
             &format!("{detail}(status={})", status.unwrap_or(-1)),
         ));
     }
-    let route = response.pointer("/result/routes/0").ok_or_else(|| AppError::upstream("百度步行路线", "响应缺少路线"))?;
+    let route = response
+        .pointer("/result/routes/0")
+        .ok_or_else(|| AppError::upstream("百度步行路线", "响应缺少路线"))?;
     let distance = route.get("distance").and_then(Value::as_u64).unwrap_or(0) as u32;
     let duration = route.get("duration").and_then(Value::as_u64).unwrap_or(0) as u32;
     Ok((distance, duration))
@@ -132,7 +151,11 @@ fn assemble(
 ///
 /// 百度地点检索失败时返回错误（AK 未开通、配额用尽这类问题换类别也一样失败）。
 /// 单个 POI 的步行路线失败只跳过那个点。
-pub fn life_circle(key: &str, origin: LatLng, package: LifeCirclePackage) -> Result<LifeCircle, AppError> {
+pub fn life_circle(
+    key: &str,
+    origin: LatLng,
+    package: LifeCirclePackage,
+) -> Result<LifeCircle, AppError> {
     let mut candidates = Vec::new();
     for category in categories(package) {
         for (name, address, location) in search(key, origin, category)? {
@@ -150,7 +173,12 @@ mod tests {
     use super::*;
 
     fn candidate(name: &str) -> (&'static str, String, String, LatLng) {
-        ("医院", name.to_string(), "某路 1 号".to_string(), LatLng::new(39.9, 116.4))
+        (
+            "医院",
+            name.to_string(),
+            "某路 1 号".to_string(),
+            LatLng::new(39.9, 116.4),
+        )
     }
 
     #[test]
@@ -170,9 +198,11 @@ mod tests {
 
     #[test]
     fn 超过十五分钟的点被筛掉() {
-        let circle = assemble(LifeCirclePackage::Care, vec![candidate("太远了")], |_| {
-            Ok((3000, LIMIT_SECONDS + 1))
-        });
+        let circle = assemble(
+            LifeCirclePackage::Care,
+            vec![candidate("太远了")],
+            |_| Ok((3000, LIMIT_SECONDS + 1)),
+        );
         assert!(circle.pois.is_empty());
     }
 
