@@ -76,6 +76,47 @@ pub fn get_json<T: DeserializeOwned>(url: &str) -> Result<T, AppError> {
         .map_err(|error| AppError::network(&error.to_string()))
 }
 
+/// 取一个 URL 并解析成 JSON，带上鉴权头。
+///
+/// 大模型服务的 `/models` 需要鉴权，而地图厂商一律把 Key 放在查询串里，
+/// 所以 [`get_json`] 没有头部参数。这里分成两个函数而不是给前者加参数：
+/// 地图侧几十个调用点不该为此各传一个 `None`。
+///
+/// # Errors
+///
+/// 网络失败、超时、非 2xx、响应不是合法 JSON 时返回 [`AppError::network`]。
+/// 401/403 会被折成带原状态码的错误 —— Key 不对与网络不通对用户是两件事。
+pub fn get_json_with_auth<T: DeserializeOwned>(
+    url: &str,
+    headers: &[(&str, &str)],
+) -> Result<T, AppError> {
+    let mut request = client().get(url);
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+
+    let response = request
+        .send()
+        .map_err(|error| AppError::network(&error.to_string()))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        // 带上响应体的前若干字节：中转商的 401 往往在 body 里写明
+        // 「余额不足」还是「key 无效」，只报 HTTP 401 等于把线索丢了。
+        let detail = response.text().unwrap_or_default();
+        let detail: String = detail.chars().take(200).collect();
+        return Err(AppError::network(&if detail.trim().is_empty() {
+            format!("HTTP {status}")
+        } else {
+            format!("HTTP {status}：{}", detail.trim())
+        }));
+    }
+
+    response
+        .json::<T>()
+        .map_err(|error| AppError::network(&error.to_string()))
+}
+
 /// 取二进制（瓦片图）。
 ///
 /// # Errors

@@ -24,6 +24,11 @@ pub fn run() {
             commands::get_map_sdk_key,
             commands::get_life_circle,
             commands::read_logs,
+            commands::list_llm_providers,
+            commands::save_llm_provider,
+            commands::delete_llm_provider,
+            commands::fetch_llm_models,
+            commands::save_llm_models,
         ])
         .run(tauri::generate_context!())
     {

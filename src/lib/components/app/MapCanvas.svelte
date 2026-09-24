@@ -27,6 +27,7 @@
     addOverlay(overlay: Overlay): void;
     removeOverlay(overlay: Overlay): void;
     enableScrollWheelZoom(enable?: boolean): void;
+    destroy(): void;
   };
   type BaiduApi = {
     Point: new (lng: number, lat: number) => Point;
@@ -69,6 +70,15 @@
 
   $effect(() => {
     if (container) void initMap(container);
+    // destroy() 是官方明写的硬要求：不调的话 WebGL 上下文、事件监听与瓦片
+    // 缓存都留在内存里。组件在路由切换时会反复挂载,漏一次积一份。
+    return () => {
+      routeOverlays.length = 0;
+      markerOverlays.length = 0;
+      map?.destroy();
+      map = null;
+      mapReady = false;
+    };
   });
 
   $effect(() => {
@@ -83,7 +93,11 @@
   async function initMap(element: HTMLElement): Promise<void> {
     try {
       const BMapGL = await loadSdk();
-      map = new BMapGL.Map(element, { enableMapClick: false });
+      // 键名必须是 enableIconClick，不能写 enableMapClick:SDK 的
+      // compatMapOptions 把后者翻成前者的分支条件是 `if(!apiVersionIsGL())`,
+      // GL 版压根不进那个分支 -- 写 enableMapClick 会被静默忽略,底图 POI
+      // 仍然可点。这一条官方文档的选项表里也只列 enableIconClick。
+      map = new BMapGL.Map(element, { enableIconClick: false });
       // centerAndZoom 必须先调：没调过的 Map 是未初始化状态，后续 addOverlay 全部无效。
       map.centerAndZoom(new BMapGL.Point(116.404, 39.915), 12);
       map.enableScrollWheelZoom(true);
