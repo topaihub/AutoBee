@@ -191,15 +191,18 @@ describe("§6.3 诚信边界", () => {
   const FORBIDDEN = ["全程无障碍", "无障碍通行", "轮椅可通行", "有电梯", "无台阶", "保证无障碍"];
 
   it("面向用户的文案不承诺未接入的设施事实", () => {
-    // 现在一个设施字段都没有（`RouteBurden` 只有时长、步行、最长单段、换乘）。
-    // 出现承诺性说法的后果不是措辞问题：推轮椅的人会照它走。
+    // 出现承诺性说法的后果不是措辞问题:推轮椅的人会照它走。
+    // 只看给用户的文案 —— 注释里解释「数据里没有电梯」不算承诺。
     const files = [
       "src/lib/components/app/RouteCard.svelte",
       "src/routes/+page.svelte",
       "src/lib/domain/accessibility.ts",
     ];
     for (const file of files) {
-      const text = readFileSync(file, "utf8");
+      const text = readFileSync(file, "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:])\/\/.*$/gm, "$1")
+        .replace(/<!--[\s\S]*?-->/g, "");
       for (const word of FORBIDDEN) {
         expect(text, `${file} 出现承诺性说法「${word}」`).not.toContain(word);
       }

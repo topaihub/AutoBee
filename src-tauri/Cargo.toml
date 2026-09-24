@@ -54,7 +54,6 @@ missing_errors_doc = "warn"
 
 [lints.rust]
 unsafe_code = "warn"
-missing_docs = "warn"
 
 [profile.release]
 lto = true

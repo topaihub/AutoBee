@@ -48,6 +48,11 @@ function fakeClient(overrides: Partial<PlannerClient> = {}): PlannerClient {
     })),
     saveSettings: vi.fn(async (s) => s),
     readLogs: vi.fn(async () => []),
+    listLlmProviders: vi.fn(async () => []),
+    saveLlmProvider: vi.fn(async () => []),
+    deleteLlmProvider: vi.fn(async () => []),
+    fetchLlmModels: vi.fn(async () => []),
+    saveLlmModels: vi.fn(async () => []),
     ...overrides,
   };
 }

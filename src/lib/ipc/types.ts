@@ -126,8 +126,10 @@ export type MapProvider = {
   coverage: string;
   coordSys: string;
   capabilities: string;
-  /** 掩码后的 Key，空串表示还没填 */
+  /** 掩码后的服务端 Key，空串表示还没填 */
   apiKeyMasked: string;
+  /** 掩码后的浏览器端 Key，空串表示还没填。只有百度用得上 */
+  browserKeyMasked: string;
   implemented: boolean;
   /** 官方申请 API Key 的控制台链接 */
   keyApplyUrl: string;
@@ -140,6 +142,8 @@ export type MapProviderInput = {
   priority?: number | null;
   /** 新密钥明文。null = 没动过（后端保留库里那份） */
   apiKey?: string | null;
+  /** 新的浏览器端密钥明文。null = 没动过 */
+  browserKey?: string | null;
 };
 
 export type Settings = {
@@ -170,4 +174,49 @@ export type LogEntry = {
 export type TestResult = {
   ok: boolean;
   message: string;
+};
+
+/**
+ * 大模型服务入口的协议。
+ *
+ * 「中转商」不是单独的类型：它就是 baseUrl 指向代理、协议选 `openai-chat`
+ * 的普通入口。与 `credentials/mod.rs` 的 `LlmProtocol` 对应（serde kebab-case）。
+ */
+export type LlmProtocol = "anthropic-messages" | "openai-responses" | "openai-chat";
+
+/** 用户从某个入口挑中的一个模型。 */
+export type LlmModel = {
+  model: string;
+  /** 显示名。缺省则显示 model */
+  alias?: string | null;
+  /** 该模型是否支持 tool calling */
+  toolsOk: boolean;
+};
+
+export type LlmProvider = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  protocol: LlmProtocol;
+  enabled: boolean;
+  /** 掩码后的 Key，空串表示还没填 */
+  apiKeyMasked: string;
+  models: LlmModel[];
+};
+
+export type LlmProviderInput = {
+  /** null = 新建 */
+  id?: string | null;
+  name: string;
+  baseUrl: string;
+  protocol: LlmProtocol;
+  enabled: boolean;
+  /** 新密钥明文。null 或空串 = 没动过（后端保留库里那份） */
+  apiKey?: string | null;
+};
+
+export type LlmModelInput = {
+  model: string;
+  alias?: string | null;
+  toolsOk?: boolean;
 };

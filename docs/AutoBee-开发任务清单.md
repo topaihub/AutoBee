@@ -302,14 +302,56 @@ M0 是它的前置,已在第一阶段列出。
 
 ### 大模型 M1 配置层 — 行 642-665
 
-- [ ] **大模型 M1-1 加两张表** — 同时开 `PRAGMA foreign_keys`。
+- [x] **大模型 M1-1 加两张表** — 同时开 `PRAGMA foreign_keys`。
   **加在 `schema::prepare` 里**(`schema.rs:57`),不是 `store.rs::open_at`(`:40`)——
   后者与测试用的 `memory()`(`:62`)是两条独立路径、各自调 `prepare`,
   只改 `open_at` 会让级联测试失败而生产正确
-- [ ] **大模型 M1-2 `llm/store.rs`** — 密钥走现有 DPAPI 通道,不新建
-- [ ] **大模型 M1-3 `llm/probe.rs`** — 拉模型列表
-- [ ] **大模型 M1-4 五个 command**
-- [ ] **大模型 M1-5 设置页** — 判据含 `settings.db` 里搜不到明文 Key
+- [x] **大模型 M1-2 `llm/store.rs`** — 密钥走现有 DPAPI 通道,不新建
+- [x] **大模型 M1-3 `llm/probe.rs`** — 拉模型列表
+- [x] **大模型 M1-4 五个 command**
+- [x] **大模型 M1-5 设置页** — 判据含 `settings.db` 里搜不到明文 Key
+
+**大模型 M1 全组已完成(2026-09-24)。** `pnpm verify` 全绿:svelte-check 355 files
+0 error、前端 86 测试(新增 `llm.svelte.test.ts` 4 条)、shell 55、core 64、CLI 16,
+clippy `-D warnings` 0 问题、fmt 干净。
+shell 那 55 条按模块实测:`llm::store` 8、`llm::probe` 3、`credentials::schema` 9
+(其中 2 条是本组新增的外键回归)、`credentials::store` 11、`credentials::resolve` 9、
+`credentials::crypto` 5、`logging` 4、`logs` 4、`paths` 2。
+**本组新增 13 条**(8 + 3 + 2)。顺带纠正交接记录里的两个过期数字:
+前一组结束时 shell 是 42 条、前端是 82 条,不是 40 与 56。
+
+**明文 Key 判据已实测,不是「看代码觉得对」。** 一次性 example 往真实文件
+存入 canary `sk-PLAINTEXT-CANARY-…`,`wal_checkpoint TRUNCATE` 强制落盘后
+按字节搜索:36864 字节里**命中 0 次**,下发给前端的是 `sk-P********disk`,
+而后端 `secret_of` 取回的明文与原文一致。三条同时成立才算过 ——
+只搜不到明文也可能是根本没存进去。
+
+**外键那条判据做了反向验证。** 把 `PRAGMA foreign_keys` 临时改成 `OFF`,
+两条新测试(级联删除、悬空 `provider_id` 被拒)**双双 FAILED**;改回 `ON` 全过。
+不做这一步的话,测试可能只是恰好通过而 `PRAGMA` 压根没生效。
+
+**设计文档三处与实际不符,已按实际实现并回写文档:**
+1. **`VERSION` 要加到 5,不是「保持 4 不变」。** 原文自己在 M1-1 里写了要加一,
+   §4.1 又写「保持 4」—— 两处矛盾。加到 5:老库的 `user_version` 停在 4,
+   不加的话将来真要迁移时无从判断这一版有没有跑过。
+2. **没有 `src/routes/settings/llm/+page.svelte` 这个路由。** 设置是**弹窗**
+   (`SettingsDialog.svelte`),不是独立页面。照原文新建路由等于在同一个仓库里
+   放两套设置入口,所以大模型配置作为第三个 `<section>` 加进现有弹窗。
+3. **`probe.rs` 放在 shell 而不是 `src-tauri/src/llm/`。** 原文按 §3.2「async
+   边界划在 app 层」把它放 app 侧,但 app 与 shell 都没有 HTTP 客户端,
+   只有 core 有(blocking `reqwest` + 共享连接池)。新增
+   `core/src/http.rs::get_json_with_auth` 复用那个池子,`probe.rs` 跟
+   `store.rs` 放一起 —— 否则要么给 app 加第二个 HTTP 栈,要么让 CLI 也拉上 tauri。
+
+**`/models` 需要鉴权头,而地图侧一律把 Key 放查询串**,所以加的是
+`get_json_with_auth` 而不是给 `get_json` 加参数 —— 后者会让地图侧几十个
+调用点各传一个 `None`。Anthropic 用 `x-api-key` + `anthropic-version: 2023-06-01`
+(缺版本头直接 400),OpenAI 兼容用 `Authorization: Bearer`。
+非 2xx 时把响应体前 200 字符带进错误:中转商的 401 往往在 body 里写明
+「余额不足」还是「key 无效」,只报 `HTTP 401` 等于把线索丢了。
+
+**空模型列表按错误处理**(`LLM_NO_MODELS`,502)。给界面一个空的多选框,
+用户没有任何办法知道是 base_url 少了 `/v1` 还是 Key 没开通。
 
 ### 大模型 M2 非流式对话 — 行 666-682
 

@@ -10,6 +10,9 @@ import type {
   Crs,
   LifeCircle,
   LifeCirclePackage,
+  LlmModelInput,
+  LlmProvider,
+  LlmProviderInput,
   LogEntry,
   MapProvider,
   MapProviderInput,
@@ -36,6 +39,12 @@ export interface PlannerClient {
   saveSettings(settings: Settings): Promise<Settings>;
   /** 回读后端日志尾部，旧的在前。 */
   readLogs(limit: number): Promise<LogEntry[]>;
+  listLlmProviders(): Promise<LlmProvider[]>;
+  saveLlmProvider(input: LlmProviderInput): Promise<LlmProvider[]>;
+  deleteLlmProvider(id: string): Promise<LlmProvider[]>;
+  /** 真发一次 `GET {baseUrl}/models`，结果不落库。 */
+  fetchLlmModels(id: string): Promise<string[]>;
+  saveLlmModels(providerId: string, models: LlmModelInput[]): Promise<LlmProvider[]>;
 }
 
 /** 真实实现：转发给 Tauri。 */
@@ -52,4 +61,9 @@ export const tauriPlannerClient: PlannerClient = {
   getSettings: () => invokeCmd("get_settings"),
   saveSettings: (settings) => invokeCmd("save_settings", { settings }),
   readLogs: (limit) => invokeCmd("read_logs", { limit }),
+  listLlmProviders: () => invokeCmd("list_llm_providers"),
+  saveLlmProvider: (input) => invokeCmd("save_llm_provider", { input }),
+  deleteLlmProvider: (id) => invokeCmd("delete_llm_provider", { id }),
+  fetchLlmModels: (id) => invokeCmd("fetch_llm_models", { id }),
+  saveLlmModels: (providerId, models) => invokeCmd("save_llm_models", { providerId, models }),
 };

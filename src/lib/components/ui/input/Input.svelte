@@ -8,6 +8,7 @@
     placeholder = undefined,
     disabled = false,
     id = undefined,
+    ariaLabel = undefined,
     oninput = () => {},
     onkeydown = () => {},
     onfocus = () => {},
@@ -19,6 +20,8 @@
     placeholder?: string;
     disabled?: boolean;
     id?: string;
+    /** 无可见标签时的可访问名。紧凑行里放不下 `<Label>`，但控件必须有名字。 */
+    ariaLabel?: string;
     oninput?: (e: Event & { currentTarget: HTMLInputElement }) => void;
     onkeydown?: (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => void;
     onfocus?: (e: FocusEvent & { currentTarget: HTMLInputElement }) => void;
@@ -29,6 +32,7 @@
 <input
   {type}
   {id}
+  aria-label={ariaLabel}
   bind:value
   {placeholder}
   {disabled}

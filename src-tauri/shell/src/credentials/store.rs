@@ -1,5 +1,3 @@
-//! 档案库的读写。
-
 use std::path::Path;
 
 use rusqlite::Connection;
@@ -9,16 +7,13 @@ use super::{MapProviderDto, MapProviderInput};
 use crate::error::AppError;
 use crate::logging::mask_secret;
 
-/// 档案库。
 pub struct Store {
     conn: Connection,
 }
 
 impl Store {
     /// 打开默认位置的库（`<exe 目录>\data\settings.db`，见 [`crate::paths::data_dir`]）。
-    ///
-    /// 这里**不是** `%LOCALAPPDATA%` 或 `%APPDATA%\<identifier>\`：便携版要求复制
-    /// 整个目录就能迁移，数据必须跟着 exe 走。
+    /// 这里**不是** `%LOCALAPPDATA%`：便携版要求复制整个目录就能迁移，数据必须跟着 exe 走。
     ///
     /// # Errors
     ///
@@ -56,17 +51,19 @@ impl Store {
         Ok(Self { conn })
     }
 
-    /// 一个只在内存里的库。测试用。
-    ///
-    /// # Errors
-    ///
-    /// 建表失败时返回错误。
     #[cfg(test)]
     pub(super) fn memory() -> Result<Self, AppError> {
         let conn = Connection::open_in_memory()
             .map_err(|error| AppError::new("DB_ERROR", format!("内存库开不了：{error}"), 500))?;
         super::schema::prepare(&conn)?;
         Ok(Self { conn })
+    }
+
+    /// 大模型配置（[`crate::llm::store`]）与地图档案共用同一个 `settings.db`,必须共用
+    /// **同一个连接**:另开一条的现象不是报错，而是并发写时偶发 `database is locked`。
+    #[must_use]
+    pub fn conn(&self) -> &Connection {
+        &self.conn
     }
 
     /// 列出全部档案，密钥已掩码。
@@ -78,7 +75,7 @@ impl Store {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT slug, name, is_preset, enabled, priority, api_key_enc
+                "SELECT slug, name, is_preset, enabled, priority, api_key_enc, browser_key_enc
                  FROM map_providers ORDER BY is_preset DESC, sort_order, name",
             )
             .map_err(|error| sql("准备查询", &error))?;
@@ -92,6 +89,7 @@ impl Store {
                     enabled: row.get::<_, i64>(3)? != 0,
                     priority: row.get::<_, Option<i64>>(4)?.map(|v| v as u32),
                     cipher: row.get(5)?,
+                    browser_cipher: row.get(6)?,
                 })
             })
             .map_err(|error| sql("读档案", &error))?;
@@ -104,19 +102,28 @@ impl Store {
         Ok(out)
     }
 
-    /// 取某家的明文密钥。
-    ///
-    /// 解不开（换了机器或账户）时返回 `Ok(None)` —— 那是「没填密钥」，
-    /// 不是错误。报错会让设置页整个打不开，而用户那时最需要的是能重填。
+    /// 解不开（换了机器或账户）时返回 `Ok(None)`:那是「没填密钥」而不是错误,报错会让设置页整个打不开。
     ///
     /// # Errors
     ///
     /// 查询失败时返回错误。
     pub fn secret_of(&self, slug: &str) -> Result<Option<String>, AppError> {
+        self.secret_column(slug, "api_key_enc")
+    }
+
+    /// # Errors
+    ///
+    /// 查询失败时返回错误。
+    pub fn browser_secret_of(&self, slug: &str) -> Result<Option<String>, AppError> {
+        self.secret_column(slug, "browser_key_enc")
+    }
+
+    /// `column` 只来自本模块的字面量,见 [`Self::save_secret`]。
+    fn secret_column(&self, slug: &str, column: &'static str) -> Result<Option<String>, AppError> {
         let cipher: Option<Vec<u8>> = self
             .conn
             .query_row(
-                "SELECT api_key_enc FROM map_providers WHERE slug = ?1",
+                &format!("SELECT {column} FROM map_providers WHERE slug = ?1"),
                 [slug],
                 |row| row.get(0),
             )
@@ -128,66 +135,66 @@ impl Store {
         Ok(crypto::unprotect(&cipher))
     }
 
-    /// 保存一条档案。
-    ///
-    /// `input.api_key` 为 `None` 表示「没动过」，保留库里那份密文 ——
-    /// 前端拿到的是掩码，不改时原样提交会把掩码串写成新 Key。
+    /// 两个密钥字段同一条约定:`None` = 「没动过」,保留库里那份密文 —— 前端拿到的是掩码,原样提交会把掩码串写成新 Key。
+    /// 两把各有动/不动两种状态,按组合写整条 UPDATE 要四个分支,所以拆成先更新非密字段再各自按需更新密文列。
     ///
     /// # Errors
     ///
-    /// 预置档案不允许改名以外的破坏性操作、加密失败、SQL 失败时返回错误。
+    /// 加密失败、SQL 失败时返回错误。
     pub fn save(&self, input: &MapProviderInput) -> Result<(), AppError> {
-        let trimmed = input.api_key.as_deref().map(str::trim).unwrap_or_default();
+        self.conn
+            .execute(
+                "UPDATE map_providers SET name = ?1, enabled = ?2, priority = ?3
+                 WHERE slug = ?4",
+                (
+                    &input.name,
+                    i64::from(input.enabled),
+                    input.priority.map(i64::from),
+                    &input.slug,
+                ),
+            )
+            .map_err(|error| sql("保存档案", &error))?;
 
-        match input.api_key.as_deref() {
-            None => {
-                // 密钥不动，只改其余字段。
-                self.conn
-                    .execute(
-                        "UPDATE map_providers SET name = ?1, enabled = ?2, priority = ?3
-                         WHERE slug = ?4",
-                        (
-                            &input.name,
-                            i64::from(input.enabled),
-                            input.priority.map(i64::from),
-                            &input.slug,
-                        ),
-                    )
-                    .map_err(|error| sql("保存档案", &error))?;
-            }
-            Some(plain) => {
-                let cipher = crypto::protect(plain.trim()).ok_or_else(|| {
-                    AppError::new(
-                        "ENCRYPT_FAILED",
-                        "密钥加密失败，本次没有保存。请确认系统 DPAPI 可用（换机器或账户后需要重填）。",
-                        500,
-                    )
-                })?;
-                self.conn
-                    .execute(
-                        "UPDATE map_providers SET name = ?1, enabled = ?2, priority = ?3,
-                         api_key_enc = ?4 WHERE slug = ?5",
-                        (
-                            &input.name,
-                            i64::from(input.enabled),
-                            input.priority.map(i64::from),
-                            cipher,
-                            &input.slug,
-                        ),
-                    )
-                    .map_err(|error| sql("保存档案与密钥", &error))?;
-                tracing::info!(
-                    provider = %input.slug,
-                    key = %mask_secret(trimmed),
-                    "已保存服务商密钥"
-                );
-            }
-        }
+        self.save_secret(&input.slug, "api_key_enc", input.api_key.as_deref())?;
+        self.save_secret(&input.slug, "browser_key_enc", input.browser_key.as_deref())?;
         Ok(())
     }
 
-    /// 删掉一条档案。预置的不允许删。
+    /// `plain` 为 `None` 时什么都不做,见 [`Self::save`]。
     ///
+    /// 列名不能参数绑定只能拼进 SQL —— `column` 必须是本模块的字面量,不能是调用方给的字符串。
+    fn save_secret(
+        &self,
+        slug: &str,
+        column: &'static str,
+        plain: Option<&str>,
+    ) -> Result<(), AppError> {
+        let Some(plain) = plain else {
+            return Ok(());
+        };
+        let trimmed = plain.trim();
+        let cipher = crypto::protect(trimmed).ok_or_else(|| {
+            AppError::new(
+                "ENCRYPT_FAILED",
+                "密钥加密失败，本次没有保存。请确认系统 DPAPI 可用（换机器或账户后需要重填）。",
+                500,
+            )
+        })?;
+        self.conn
+            .execute(
+                &format!("UPDATE map_providers SET {column} = ?1 WHERE slug = ?2"),
+                (cipher, slug),
+            )
+            .map_err(|error| sql("保存密钥", &error))?;
+        tracing::info!(
+            provider = %slug,
+            column,
+            key = %mask_secret(trimmed),
+            "已保存服务商密钥"
+        );
+        Ok(())
+    }
+
     /// # Errors
     ///
     /// 试图删预置档案、或 SQL 失败时返回错误。
@@ -215,8 +222,6 @@ impl Store {
         Ok(())
     }
 
-    /// 读一个偏好值。
-    ///
     /// # Errors
     ///
     /// 查询失败时返回错误。
@@ -232,8 +237,6 @@ impl Store {
         }
     }
 
-    /// 写一个偏好值。
-    ///
     /// # Errors
     ///
     /// SQL 失败时返回错误。
@@ -249,7 +252,6 @@ impl Store {
     }
 }
 
-/// 库里的一行。
 struct Raw {
     slug: String,
     name: String,
@@ -257,9 +259,9 @@ struct Raw {
     enabled: bool,
     priority: Option<u32>,
     cipher: Option<Vec<u8>>,
+    browser_cipher: Option<Vec<u8>>,
 }
 
-/// 一行档案 + 注册表的静态信息 → 下发前端的 DTO。
 fn dto_of(raw: &Raw) -> MapProviderDto {
     let id = route_core::models::ProviderId::parse(&raw.slug);
     let (coverage, coord_sys, capabilities, default_priority, key_apply_url) =
@@ -288,6 +290,11 @@ fn dto_of(raw: &Raw) -> MapProviderDto {
         .as_deref()
         .and_then(crypto::unprotect)
         .unwrap_or_default();
+    let browser_plain = raw
+        .browser_cipher
+        .as_deref()
+        .and_then(crypto::unprotect)
+        .unwrap_or_default();
 
     MapProviderDto {
         slug: raw.slug.clone(),
@@ -303,6 +310,11 @@ fn dto_of(raw: &Raw) -> MapProviderDto {
             String::new()
         } else {
             mask_secret(&plain)
+        },
+        browser_key_masked: if browser_plain.is_empty() {
+            String::new()
+        } else {
+            mask_secret(&browser_plain)
         },
         implemented: id.is_some_and(route_core::factory::is_implemented),
         key_apply_url,
@@ -341,6 +353,7 @@ mod tests {
             enabled: true,
             priority: None,
             api_key: key.map(str::to_string),
+            browser_key: None,
         }
     }
 
@@ -470,12 +483,7 @@ mod tests {
         assert!(amap.implemented, "高德已实现");
     }
 
-    /// 走真实文件路径存取一次密钥。
-    ///
-    /// 其余测试用的是 `memory()`,它与 `open_at` 是两条独立路径。而这条要防的
-    /// 是 DPAPI 退化成空实现(`crypto.rs` 那两个 `#[cfg(not(windows))]` 的桩):
-    /// 那时 `secret_of` 返回 `None`、界面上只看到密钥框空了,而 `memory()`
-    /// 的测试照样全绿。顺带断言落盘无明文。
+    /// 防 DPAPI 退化成空实现(`crypto.rs` 里 `#[cfg(not(windows))]` 的桩):那时 `secret_of` 返回 `None`,而只用 `memory()` 的测试照样全绿。
     #[cfg(windows)]
     #[test]
     fn 真实文件路径上密钥能加密落盘再读回() {
@@ -492,6 +500,7 @@ mod tests {
                 enabled: true,
                 priority: None,
                 api_key: Some(plain.into()),
+                browser_key: None,
             })
             .unwrap();
 

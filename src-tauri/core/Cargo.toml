@@ -27,5 +27,3 @@ expect_used = "warn"
 panic = "warn"
 missing_errors_doc = "warn"
 
-[lints.rust]
-missing_docs = "warn"

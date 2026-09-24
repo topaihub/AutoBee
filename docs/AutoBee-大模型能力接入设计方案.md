@@ -134,7 +134,7 @@ openfang 把「全文注入」换成模型主动拉取,用三个内置 tool(`too
 
 1. 报告称需要 `AppError::field` / `user_input` / `environment` 三类构造器。实际 `AppError` 只有通用 `new(code, message, status)` 加若干语义构造器,**用 `new` 带一个新 code 即可**,不新增类型。
 2. 报告把 tool 入口写作 `suggest`。真实签名是 `suggest_places(config: &Config, keyword: &str, page_size: usize) -> Vec<Place>`(`core/src/planner.rs:274`),**返回裸 `Vec` 不是 `Result`**。
-3. 报告称加表要走迁移分支。实际只需把 DDL 加进 `CREATE` 常量;`VERSION` 仅在需要改写既有数据时才加。
+3. 报告称加表要走迁移分支。实际只需把 DDL 加进 `CREATE` 常量,`migrate` 里不需要动作 —— 但 `VERSION` 仍要加一(4 → 5),否则老库的 `user_version` 永远停在 4,将来真要改写数据时无从判断这一版跑过没有。见 4.1。
 4. 报告未提及 `Segment.points` 是解码后的完整折线 `Vec<LatLng>`(`core/src/models.rs:234`)。这条决定 tool 返回值必须裁剪,见 4.4。
 
 ## 3. 架构决策
@@ -158,11 +158,20 @@ flowchart TB
   Store --> Db[(settings.db<br/>DPAPI 密文)]
 ```
 
-### 3.2 决策一:async 边界划在 app 层
+### 3.2 决策一:async 边界划在 command 层
 
-`route-core` 保持 blocking。新增的 `src-tauri/src/llm/` 全部 async,调用 core 时用 `tauri::async_runtime::spawn_blocking` —— 这与现有 command 的写法一致(`src/commands.rs` 已经在这么做)。
+`route-core` 保持 blocking。async 边界划在 **command 层**(`src-tauri/src/commands/llm.rs`):
+command 是 async,内部一律 `tauri::async_runtime::spawn_blocking` 包住 shell 的同步调用 ——
+这与现有地图 command 的写法一致(`commands/map.rs` 已经在这么做)。
 
-代价:仓库里同时存在两套 HTTP 写法(core 的 blocking reqwest、app 的 async reqwest)。这是**有意接受**的分裂,换来 core 的单测速度不退化。
+**M1 实测修正:`store.rs` 与 `probe.rs` 落在 `src-tauri/shell/src/llm/`,不是 `src-tauri/src/llm/`,
+两者都是同步函数。** 原文打算把 `llm/` 整个放 app 侧并用 async reqwest,
+但 app 与 shell 都没有 HTTP 客户端,只有 core 有(blocking `reqwest` + `OnceLock` 共享连接池,
+`core/src/http.rs:29`)。放 app 侧就得为它引入第二套 HTTP 栈;放 core 里则会让
+CLI(`autobee-cli`)连带拖上 tauri。落在 shell 并复用 core 的池子是唯一不新增依赖的位置。
+
+代价:仓库里只有一套 HTTP 写法(core 的 blocking reqwest),
+并发靠 command 层的 `spawn_blocking` 拿 —— 比原文预想的两套栈更省。
 
 ### 3.3 决策二:配置模型采用三层,但简化一层
 
@@ -193,7 +202,11 @@ llm_models      一行 = 用户从该入口挑中的一个模型
 
 ### 4.1 新增表
 
-全部加进 `src-tauri/src/credentials/schema.rs` 的 `CREATE` 常量(`IF NOT EXISTS`,每次开库无条件执行)。`VERSION` 保持 4 不变 —— 没有既有数据需要改写。
+全部加进 `src-tauri/shell/src/credentials/schema.rs` 的 `CREATE` 常量(`IF NOT EXISTS`,每次开库无条件执行)。
+
+**`VERSION` 加到 5,原文「保持 4 不变」是错的** —— 同一份文档的 M1-1 任务里写的是「加一到 5」,两处自相矛盾。已按加到 5 实现:老库的 `user_version` 停在 4,不加的话将来真要迁移时无从判断这一版跑过没有。`migrate` 里 `from < 5` 不需要动作(`CREATE` 里的 `IF NOT EXISTS` 已经把表补齐),但版本号必须往前走。
+
+**外键开在 `prepare` 里、建表之前**(`schema.rs:76-78`),不是 `store.rs` 的 `open_at`。理由见 M1-1 任务条,实测已验证。
 
 ```sql
 CREATE TABLE IF NOT EXISTS llm_providers (
@@ -500,12 +513,19 @@ src/lib/state/chat.svelte.ts              会话状态(消息数组 + 流式累�
 src/lib/components/app/ChatPanel.svelte    左栏对话流 + 输入区
 src/lib/components/app/ChatBubble.svelte
 src/lib/components/app/ToolTrace.svelte    工具调用的可折叠痕迹
-src/routes/settings/llm/+page.svelte       服务商与模型配置
-src/lib/state/llm-providers.svelte.ts
+src/lib/components/app/SettingsDialog.svelte  (改)服务商与模型配置作为第三个 section
+src/lib/state/llm.svelte.ts
 src/routes/+page.svelte                    (改)View 加 "chat",nav 加第四个按钮
 ```
 
 没有 `src/routes/chat/+page.svelte` —— 这正是 6.4.1 的结论。
+
+**也没有 `src/routes/settings/llm/+page.svelte`,原文这一行是错的。** 仓库里
+`src/routes/` 只有 `+page.svelte` 与 `+layout.svelte` 两个文件,设置从来是**弹窗**
+(`SettingsDialog.svelte`,地图服务商 + 规划偏好两个 `<section>`)。照原文新建路由
+等于在同一个仓库里放两套设置入口,所以大模型配置是加进现有弹窗的第三个 `<section>`。
+状态类同理叫 `llm.svelte.ts` 而不是 `llm-providers.svelte.ts` —— 与
+`providers.svelte.ts`(地图服务商)并列,后者已经占掉了 providers 这个名字。
 
 ### 6.5 Markdown 渲染的 XSS 面
 
@@ -641,27 +661,31 @@ MCP 结果来自第三方 server,属外部内容。按 2.2.2 的结论包裹:**�
 
 ### M1 配置层
 
-- [ ] **M1-1 加两张表**
+- [x] **M1-1 加两张表**(已完成 2026-09-24)
   - `credentials/schema.rs` 的 `CREATE`(现 20-35 行)追加 `llm_providers` / `llm_models` 两段 DDL,照 4.2 的 SQL。
-  - `VERSION`(现 `schema.rs:14`,值 4)加一到 5,在 `migrate` 里加 `if version < 5` 分支。**光改 `CREATE` 不够**:`IF NOT EXISTS` 对老库里已存在的表不会补列,而新装用户与老用户会走出两套库结构。
+  - `VERSION`(现 `schema.rs:14`,值 4)加一到 5。**`migrate` 里 `from < 5` 不需要动作** —— 表是靠 `CREATE` 里的 `IF NOT EXISTS` 补的,老库缺表会在下次开库时建好;但版本号必须往前走,否则将来真要改写数据时无从判断这一版跑过没有。
   - 外键默认是关的,要开。开在 `schema::prepare` 里面(建表之前),**不要开在 `store.rs` 的 `open_at`**:`open_at`(`:40`)与测试用的 `memory()`(`:62`)是两条独立的打开路径,各自调一次 `prepare`(`:52`、`:65`)。只在 `open_at` 加,下面那条级联测试走 `memory()`,外键是关的,测试失败而生产是对的 —— 排查方向会被带偏。
-  - 判据:`cargo test -p autobee` 全绿;新加一个测试「删 provider 级联删掉它的 model 行」—— 不开外键时这个测试会失败,它就是 `PRAGMA` 真的生效的证据(也是 11.1 那条破坏性改动的回归)。
-- [ ] **M1-2 `llm/store.rs`**
+  - 判据实测:`cargo test -p autobee-shell` 全绿 55 条。**反向验证做了**:把 `PRAGMA foreign_keys` 临时改成 `OFF`,两条新测试(级联删除、悬空 `provider_id` 被拒)双双 FAILED;改回 `ON` 全过。不做这一步的话,测试可能只是恰好通过而 `PRAGMA` 压根没生效。
+- [x] **M1-2 `llm/store.rs`**(已完成 2026-09-24)
   - provider / model 的 CRUD。Key 走 `credentials::crypto::protect` / `unprotect`,与 `map_providers` 同构。
   - 空 Key 的 `save` 表示**不改动原 Key**(6.2 表格),不是清空 —— 用户编辑名字时不会重新输一遍 Key。
   - 下发前一律过 `logging::mask_secret`。
-  - 判据:`Connection::open_in_memory()` 的单测覆盖三条:存进去读出来是掩码、空 Key 不覆盖原 Key、解不开密文当没填(照 `crypto.rs:14-17` 的降级)。
-- [ ] **M1-3 `llm/probe.rs`**
+  - 判据实测:`llm::store` 8 条全绿,覆盖掩码、空 Key 不覆盖、解不开密文当没填、`base_url` 末尾斜杠归一。
+- [x] **M1-3 `llm/probe.rs`**(已完成 2026-09-24)
   - `GET {base_url}/models`,返回 `Vec<String>`,**不落库**。
-  - 判据:`fetch_llm_models` 对真实中转商返回非空列表。
-- [ ] **M1-4 五个 command**
+  - 判据:`fetch_llm_models` 对真实中转商返回非空列表。**这一条要用户拿真实 Key 点一次才算过** —— 单测只能覆盖到「没填 Key 直接拒」(`LLM_KEY_REQUIRED`)与 URL 拼接,发不出真请求。`llm::probe` 3 条全绿。
+  - **`/models` 要鉴权头,而地图侧一律把 Key 放查询串**,所以新增 `core/src/http.rs::get_json_with_auth` 而不是给 `get_json` 加参数 —— 后者会让地图侧几十个调用点各传一个 `None`。Anthropic 用 `x-api-key` + `anthropic-version: 2023-06-01`(缺版本头直接 400),OpenAI 兼容用 `Authorization: Bearer`。
+  - 非 2xx 时把响应体前 200 字符带进错误:中转商的 401 往往在 body 里写明是「余额不足」还是「key 无效」,只报 `HTTP 401` 等于把线索丢了。空列表按错误处理(`LLM_NO_MODELS`,502),给个空多选框用户没办法知道是 `base_url` 少了 `/v1` 还是 Key 没开通。
+- [x] **M1-4 五个 command**(已完成 2026-09-24)
   - `commands/llm.rs`:`list_llm_providers` / `save_llm_provider` / `delete_llm_provider` / `fetch_llm_models` / `save_llm_models`,签名照 6.2 的表。
   - `lib.rs` 的 `generate_handler!` 注册这五个。
-  - 判据:`pnpm verify` 全绿。
-- [ ] **M1-5 设置页**
-  - `src/routes/settings/llm/+page.svelte`:provider 列表 + 表单 + 「获取模型列表」按钮 + 模型多选。
-  - `src/lib/ipc/types.ts` 加 `LlmProviderDto` / `LlmProviderInput` / `LlmModelInput`,`client.ts` 的 `PlannerClient` 加五个方法 —— 漏了接口那一步,`planner.svelte.test.ts` 的 `fakeClient` 会编译失败,这是刻意的约束(9.4)。
-  - 判据:填入真实中转商 base_url + Key,点「获取模型列表」出现真实模型名;重启程序 Key 仍在;`certutil -dump` 或十六进制查看 `settings.db` 搜不到明文 Key。
+  - 判据实测:`pnpm verify` 全绿。**注意 clippy 3 秒返回是缓存空转**,`touch` 过 `commands/llm.rs` / `llm/store.rs` / `core/src/http.rs` 再跑,确认四个 crate 都真的重新 `Checking` 了。
+- [x] **M1-5 设置页**(已完成 2026-09-24)
+  - 配置作为第三个 `<section>` 加进 `SettingsDialog.svelte`,**不是新建路由** —— 理由见 6.4.5 的修正段。
+  - `src/lib/ipc/types.ts` 加 `LlmProviderDto` / `LlmProviderInput` / `LlmModelInput` / `LlmProtocol`,`client.ts` 的 `PlannerClient` 加五个方法 —— 漏了接口那一步,`planner.svelte.test.ts` 的 `fakeClient` 会编译失败,这是刻意的约束(9.4),**实测确实触发了**,补完五个方法才过。
+  - 判据实测:明文 Key 那条**已用一次性 example 验证**。往真实文件存 canary `sk-PLAINTEXT-CANARY-…`,`wal_checkpoint TRUNCATE` 强制落盘(不 checkpoint 的话数据可能还在 WAL 里,搜不到会变成假阳性)后按字节搜索:36864 字节里**命中 0 次**,下发给前端的是 `sk-P********disk`,后端 `secret_of` 取回的明文与原文一致。三条同时成立才算过 —— 只搜不到明文也可能是根本没存进去。
+  - **剩下两条判据要用户操作**:填真实中转商 base_url + Key 点「获取模型列表」出现真实模型名、重启程序 Key 仍在。模型无法代跑。
+  - 顺带给 `Input.svelte` 加了 `ariaLabel` prop:紧凑行里放不下 `<Label>`,但控件必须有可访问名。直接写 `aria-label` 会被 svelte-check 拒(`$$ComponentProps` 里没这个键)。
 
 ### M2 非流式对话
 
@@ -783,9 +807,9 @@ MCP 纳入范围(12 节问题 6)不改变这个优先级:M5 仍排在最后。�
 ## 10. 新增文件清单
 
 ```text
-src-tauri/src/llm/mod.rs
-src-tauri/src/llm/store.rs        provider/model/会话 CRUD + DPAPI
-src-tauri/src/llm/probe.rs        拉模型列表
+src-tauri/shell/src/llm/mod.rs
+src-tauri/shell/src/llm/store.rs  provider/model/会话 CRUD + DPAPI(同步,M1 已完成)
+src-tauri/shell/src/llm/probe.rs  拉模型列表(同步,M1 已完成)
 src-tauri/src/llm/http.rs         协议实现(M2 非流式 → M4 流式)
 src-tauri/src/llm/tools.rs        三个 tool 的 schema 与裁剪后结构
 src-tauri/src/llm/agent.rs        回合循环
@@ -795,18 +819,25 @@ src-tauri/src/commands/map.rs     (M0 拆分)现有 12 个地图 command 原样�
 src-tauri/src/llm/mcp.rs          手写 MCP 客户端(四条消息 + 握手校验,见 7.3.1)
 
 src/lib/state/chat.svelte.ts
-src/lib/state/llm-providers.svelte.ts
+src/lib/state/llm.svelte.ts
 src/lib/components/app/ChatPanel.svelte   左栏对话流 + 输入区
 src/lib/components/app/ChatBubble.svelte
 src/lib/components/app/ToolTrace.svelte
-src/routes/settings/llm/+page.svelte
+src/lib/components/app/SettingsDialog.svelte  (改)第三个 section:大模型服务
 src/routes/settings/mcp/+page.svelte      MCP server 配置
 src/routes/+page.svelte          (改)View 加 "chat",nav 加第四个按钮
 src/lib/ipc/types.ts             (改)加 LLM 相关类型
 src/lib/ipc/client.ts            (改)PlannerClient 加方法
-src-tauri/src/credentials/schema.rs  (改)CREATE 加表 + 开 foreign_keys
+src-tauri/shell/src/credentials/schema.rs  (改)CREATE 加表 + VERSION 4→5 + 开 foreign_keys
+src-tauri/shell/src/credentials/mod.rs     (改)加 LLM DTO 与 LlmProtocol
+src-tauri/core/src/http.rs                 (改)加 get_json_with_auth(/models 要鉴权头)
 src-tauri/src/lib.rs             (改)注册 command
 ```
+
+**上面 `src-tauri/src/llm/` 那几行里,`store.rs` 与 `probe.rs` 实际落在
+`src-tauri/shell/src/llm/`(M1 实测)。** 理由见 3.2 的修正段:HTTP 客户端只有 core 有。
+`http.rs` / `tools.rs` / `agent.rs` / `mcp.rs` 到 M2 及以后再定位置,
+但既然 M1 已经证明 shell 能拿到 HTTP,大概率也在 shell 而不是 app。
 
 现有 `src-tauri/src/commands.rs` 是单文件(360 行 / 12 个 command)。新增 LLM 的十个 command 继续塞进去会让它膨胀到难以浏览,**因此这次拆**:`commands.rs` → `commands/mod.rs` + `commands/map.rs` + `commands/llm.rs`。拆分本身是 M0-1,纯搬移不改行为、单独一个提交,与功能代码分开。理由不是这次十个 command,是下一次还会有第十一个。
 

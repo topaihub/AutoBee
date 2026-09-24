@@ -1,30 +1,21 @@
-//! 归一化数据契约 —— 前端只消费这里定义的结构。
-//!
-//! 对应 SPEC 4.5 / 11.5。所有 provider adapter 都把各自的原始响应折成这里的
-//! 形状，前端不感知任何厂商细节。**新增厂商 = 新增一个 adapter，不动这里。**
+//! 归一化数据契约（SPEC 4.5 / 11.5）—— 前端只消费这里定义的结构，不感知任何
+//! 厂商细节。**新增厂商 = 新增一个 adapter，不动这里。**
 
 use serde::{Deserialize, Serialize};
 
-/// 经纬度。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct LatLng {
-    /// 纬度。
     pub lat: f64,
-    /// 经度。
     pub lng: f64,
 }
 
 impl LatLng {
-    /// 构造一个坐标。
     #[must_use]
     pub fn new(lat: f64, lng: f64) -> Self {
         Self { lat, lng }
     }
 
-    /// 两点间的球面距离（米）。
-    ///
-    /// 用来做验收断言（解码出来的末点是不是落在终点附近）与前端的兜底计算，
-    /// 不参与算路本身。
+    /// 两点间的球面距离（米）。不参与算路，只用于验收断言与前端兜底。
     #[must_use]
     pub fn haversine_m(self, other: Self) -> f64 {
         const R: f64 = 6_371_008.8;
@@ -38,25 +29,18 @@ impl LatLng {
     }
 }
 
-/// 坐标系。
-///
 /// 各家不一样：腾讯/高德 GCJ-02、百度 BD-09、天地图 CGCS2000、HERE/Google WGS-84。
 /// CGCS2000 与 WGS-84 的差值在厘米级，实用上按等同处理（见 [`geo`]）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Crs {
-    /// 世界大地坐标系，GPS 与 OSM 瓦片用的就是这个。
     Wgs84,
-    /// 国测局坐标系（火星坐标），腾讯与高德。
     Gcj02,
-    /// 百度坐标系，在 GCJ-02 上又加了一层偏移。
     Bd09,
-    /// 中国大地坐标系 2000，天地图。
     Cgcs2000,
 }
 
 impl Crs {
-    /// 解析前端或配置里的字符串。认不出返回 `None`。
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         match text.trim().to_ascii_uppercase().as_str() {
@@ -68,28 +52,17 @@ impl Crs {
         }
     }
 
-    /// 全部合法值,与 [`Self::parse`] 认的一一对应。
-    ///
-    /// 给界面、CLI 的 `--help`、报错信息拼可选值用。不许在别处再抄一份:
-    /// 抄的那份不会随这里一起改,于是报错里列的值与真正认的值会漂开。
     pub const ALL: [&'static str; 4] = ["WGS84", "GCJ02", "BD09", "CGCS2000"];
 }
 
-/// 地图服务商。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProviderId {
-    /// 腾讯位置服务。
     Tencent,
-    /// 高德。
     Amap,
-    /// 百度地图。
     Baidu,
-    /// 天地图。
     Tianditu,
-    /// HERE（海外）。
     Here,
-    /// Google Maps（海外）。
     Google,
 }
 
@@ -107,7 +80,6 @@ impl ProviderId {
         }
     }
 
-    /// 中文显示名。
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
@@ -120,7 +92,6 @@ impl ProviderId {
         }
     }
 
-    /// 解析 slug。认不出返回 `None`（调用方应当跳过而不是猜测）。
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         match text.trim().to_ascii_lowercase().as_str() {
@@ -135,7 +106,6 @@ impl ProviderId {
     }
 }
 
-/// 出行方式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TravelMode {
@@ -143,15 +113,11 @@ pub enum TravelMode {
     Subway,
     /// 公交优先（含公交+地铁的组合）。
     Bus,
-    /// 步行。
     Walking,
 }
 
 impl TravelMode {
-    /// 解析前端或模型给出的字符串。
-    ///
-    /// 不认识就返回 `None` 而不是猜一个默认值:调用方是大模型时,猜出来的
-    /// 结果它分辨不出错,也就无法重试。
+    /// 不认识返回 `None` 而不是猜默认值:调用方是大模型时,分辨不出猜错,无法重试。
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         match text.trim().to_ascii_lowercase().as_str() {
@@ -162,22 +128,17 @@ impl TravelMode {
         }
     }
 
-    /// 全部合法值,用于错误信息里告诉调用方该填什么。
     pub const ALL: [&'static str; 3] = ["subway", "bus", "walking"];
 }
 
-/// 方案排序依据。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SortBy {
-    /// 时间最短。
     Time,
-    /// 距离最短。
     Distance,
 }
 
 impl SortBy {
-    /// 解析前端或模型给出的字符串。理由同 [`TravelMode::parse`]。
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         match text.trim().to_ascii_lowercase().as_str() {
@@ -187,116 +148,84 @@ impl SortBy {
         }
     }
 
-    /// 全部合法值。
     pub const ALL: [&'static str; 2] = ["time", "distance"];
 }
 
-/// 交通工具。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Vehicle {
-    /// 地铁。
     Subway,
-    /// 公交。
     Bus,
 }
 
-/// 一个地点（POI 或解析结果）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Place {
-    /// 名称。
     pub title: String,
-    /// 详细地址，可能缺失。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
-    /// 坐标。
     pub location: LatLng,
     /// 行政区划代码。中国境内是 6 位数字，用它判境内/境外。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub adcode: Option<String>,
-    /// 这条结果由哪家给出。
     pub provider: ProviderId,
-    /// 该 provider 内部的 POI id。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
 }
 
-/// 上下车站点。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Stop {
-    /// 站名。
     pub title: String,
-    /// 坐标。
     pub location: LatLng,
-    /// 建议进站口，只有部分线路会给。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exit: Option<String>,
 }
 
-/// 一条公交线路 / 地铁线路。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransitLine {
-    /// 地铁还是公交。
     pub vehicle: Vehicle,
-    /// 线路名，如「2号线」。
     pub title: String,
-    /// 乘坐站数。
     pub station_count: u32,
-    /// 服务端定好的颜色，前端不再计算（配色规则只有一处实现）。
     pub color: String,
-    /// 上车站点。
     pub get_on: Stop,
-    /// 下车站点。
     pub get_off: Stop,
-    /// 开往方向。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub destination: Option<String>,
-    /// 首班车时间。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_time: Option<String>,
-    /// 末班车时间。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_time: Option<String>,
 }
 
-/// 一段行程：要么步行，要么乘车。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Segment {
-    /// 这一段是走路还是坐车。
     pub kind: SegmentKind,
     /// 距离，米。
     pub distance: u32,
     /// 耗时，分钟。
     pub duration: u32,
-    /// 已解码的折线点。
     pub points: Vec<LatLng>,
-    /// 步行指令。乘车段没有这个。
+    /// 步行指令，乘车段为空。
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub instruction: Vec<String>,
-    /// 乘车段的线路信息。步行段没有。
+    /// 乘车段的线路信息，步行段为 `None`。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub line: Option<TransitLine>,
 }
 
-/// 段的类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SegmentKind {
-    /// 步行。
     Walk,
-    /// 乘车（地铁或公交）。
     Transit,
 }
 
-/// 一个候选方案。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Route {
-    /// 方案 id，前端选中态用。
     pub id: String,
     /// 总距离，米。
     pub distance: u32,
@@ -304,35 +233,26 @@ pub struct Route {
     pub duration: u32,
     /// 票价，**元**。注意腾讯原始单位是「分」，换算在 adapter 里做。
     pub price: f64,
-    /// 外接矩形，前端据此自适应缩放。
     pub bounds: [LatLng; 2],
-    /// 分段。
     pub segments: Vec<Segment>,
 }
 
-/// 一次规划的完整结果。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoutePlan {
-    /// 起点。
     pub origin: Endpoint,
-    /// 终点。
     pub destination: Endpoint,
-    /// 出行方式。
     pub mode: TravelMode,
     /// 候选方案，已按 [`SortBy`] 排好序。
     pub routes: Vec<Route>,
-    /// 这次结果来自哪家。前端应当显示「数据来源」—— 同一对起终点在不同
-    /// 厂商那里给出的方案数、时长、票价都可能不一样。
+    /// 这次结果来自哪家。不同厂商的方案数、时长、票价都可能不同，前端应显示「数据来源」。
     pub provider: ProviderId,
     /// 本份结果所用的坐标系。前端底图必须与之匹配，否则整体偏移几百米。
     pub crs: Crs,
-    /// 降级说明：主 provider 失败时记录尝试过的链路。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub degraded: Option<Degraded>,
 }
 
-/// 15 分钟生活圈服务包。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LifeCirclePackage {
@@ -345,11 +265,8 @@ pub enum LifeCirclePackage {
 }
 
 impl LifeCirclePackage {
-    /// 解析前端或命令行给出的字符串。认不出返回 `None`。
-    ///
-    /// trim + 忽略大小写,与 [`TravelMode::parse`] / [`SortBy::parse`] /
-    /// [`Crs::parse`] 一致。命令行上 `--package Care` 与 `--package care`
-    /// 不该一个通一个不通。
+    /// 解析前端或命令行给出的字符串。认不出返回 `None`。trim + 忽略大小写,
+    /// 与 [`TravelMode::parse`] / [`SortBy::parse`] / [`Crs::parse`] 一致。
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         match text.trim().to_ascii_lowercase().as_str() {
@@ -360,59 +277,48 @@ impl LifeCirclePackage {
         }
     }
 
-    /// 全部合法值,与 [`Self::parse`] 认的一一对应。理由同 [`Crs::ALL`]。
+    /// 全部合法值,与 [`Self::parse`] 一一对应。理由同 [`Crs::ALL`]。
     pub const ALL: [&'static str; 3] = ["care", "family", "emergency"];
 }
 
-/// 生活圈内一个经真实步行路线验证的 POI。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReachablePoi {
     /// 服务类别，例如“药店”。
     pub category: String,
-    /// POI 名称。
     pub name: String,
-    /// 人类可读地址。
     pub address: String,
     /// 百度 BD-09 坐标。
     pub location: LatLng,
-    /// 从起点步行所需秒数。
     pub walk_duration_sec: u32,
     /// 从起点步行距离，米。
     pub walk_distance: u32,
 }
 
-/// 一个服务包的 15 分钟可达结果。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LifeCircle {
-    /// 本次服务包。
     pub package: LifeCirclePackage,
     /// 生活圈点位输出的坐标系，和请求起点保持一致。
     pub crs: Crs,
-    /// 固定 15 分钟，用于前端明确展示约束。
+    /// 固定 15 分钟，前端据此展示约束。
     pub limit_minutes: u32,
     /// 按步行时间升序的可达 POI。
     pub pois: Vec<ReachablePoi>,
 }
 
-/// 起点或终点。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Endpoint {
     /// 名称（含自动纠错的结果，如「铢家村」→「钟家村」）。
     pub title: String,
-    /// 坐标。
     pub location: LatLng,
 }
 
-/// 降级记录。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Degraded {
-    /// 尝试过哪几家。
     pub tried: Vec<ProviderId>,
-    /// 最后一次失败的原因。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -484,8 +390,7 @@ mod tests {
 
     #[test]
     fn 出行方式与排序拒绝不认识的值而不是猜一个() {
-        // 曾经的行为是 `_ => Subway` / else Time：模型写 "transit" 会静默
-        // 得到地铁+耗时的结果，自己不知道参数错了，也就无从重试。
+        // 猜默认值会让调用方（大模型）静默拿到错结果，自己无从重试。
         assert_eq!(TravelMode::parse("transit"), None);
         assert_eq!(TravelMode::parse("地铁"), None);
         assert_eq!(SortBy::parse("fastest"), None);
@@ -503,8 +408,7 @@ mod tests {
         assert_eq!(SortBy::parse(" Distance "), Some(SortBy::Distance));
     }
 
-    /// 四个 `ALL` 是界面、CLI `--help`、报错信息拼可选值的唯一来源。
-    /// 它与 `parse` 漂开的现象是:报错说「可选:a / b」,而填 b 被拒。
+    /// `ALL` 与 `parse` 漂开的现象是:报错说「可选:a / b」,而填 b 被拒。
     #[test]
     fn 四个枚举的_all_与_parse_一一对应() {
         for text in TravelMode::ALL {

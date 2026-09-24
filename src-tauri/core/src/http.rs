@@ -1,15 +1,11 @@
 //! HTTP 客户端。
 //!
-//! # 为什么是 blocking
+//! blocking:算路是「发一个请求、等一个响应」,没有并发扇出。引 async 会把
+//! `async` 传染到每个 adapter 与每个单测,换不来吞吐。调用方(Tauri command)
+//! 负责丢到阻塞线程池。
 //!
-//! 算路就是「发一个请求、等一个响应」，没有并发扇出。引 async 会把
-//! `async` 传染到每个 adapter 与每个单测，换不来任何吞吐。
-//! 调用方（Tauri command）负责把它丢到阻塞线程池，不让 UI 卡住。
-//!
-//! # 为什么要一个共享 Client
-//!
-//! 每次请求新建一个 Client 会新建连接池，TCP 与 TLS 握手重来一遍：
-//! 一次算路要连发三次请求（联想、解析、算路），那个延迟是能感觉出来的。
+//! 共享 Client:一次算路连发三次请求(联想、解析、算路),每次新建 Client
+//! 就是三轮 TCP + TLS 握手。
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -36,11 +32,9 @@ fn client() -> &'static reqwest::blocking::Client {
     })
 }
 
-/// URL 组件编码（百分号编码）。
+/// URL 组件编码(百分号编码)。
 ///
-/// 字符一律按 UTF-8 字节编码 —— 中文地点名、空格、斜杠都要能安全放进查询串。
-/// 保留 `-._~` 与字母数字：那些是 RFC 3986 的未保留字符，编不编都行，
-/// 但不编更好读（`/ws/geocoder/v1` 这种路径不受影响）。
+/// 一律按 UTF-8 字节编码。保留 RFC 3986 的未保留字符 `-._~` 与字母数字。
 #[must_use]
 pub fn encode_component(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -76,11 +70,10 @@ pub fn get_json<T: DeserializeOwned>(url: &str) -> Result<T, AppError> {
         .map_err(|error| AppError::network(&error.to_string()))
 }
 
-/// 取一个 URL 并解析成 JSON，带上鉴权头。
+/// 取一个 URL 并解析成 JSON,带上鉴权头。
 ///
-/// 大模型服务的 `/models` 需要鉴权，而地图厂商一律把 Key 放在查询串里，
-/// 所以 [`get_json`] 没有头部参数。这里分成两个函数而不是给前者加参数：
-/// 地图侧几十个调用点不该为此各传一个 `None`。
+/// 与 [`get_json`] 分成两个函数,是因为地图侧几十个调用点不该为此各传一个
+/// `None` —— 地图厂商一律把 Key 放查询串里,只有大模型的 `/models` 要头部。
 ///
 /// # Errors
 ///

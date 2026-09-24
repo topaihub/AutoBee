@@ -1,22 +1,8 @@
-//! 阶段一：全球地理编码 —— 只用来回答「这个地点属于哪个国家」。
+//! 阶段一：全球地理编码 —— 只回答「这个地点属于哪个国家」。
 //!
-//! # 为什么要有这一跳
-//!
-//! 选 provider 需要知道坐标属于哪国，可「文本 → 坐标」本身就得调某个 provider，
-//! 而国内厂商基本只覆盖中国大陆。这是个死循环，拆成两阶段才解得开：
-//!
-//! 1. **这里**：用一个覆盖全球的免 Key 服务拿到 `lat,lng + country_code`
-//! 2. **阶段二**：按国家码选中 provider 后，**再用它自己的地点搜索精化一次**
-//!
-//! 第二跳不能省：地铁站、出入口这类 POI 只有本土服务解析得准 ——
-//! 「铢家村-E1口」在全球服务里查不到，在腾讯 suggestion 里会被纠正成「钟家村-E1口」。
-//!
-//! # 实测要点
-//!
-//! - Photon 的 `properties.countrycode` 是 ISO 3166-1 alpha-2（武汉→CN、Tokyo Station→JP）。
-//! - Photon 对 POI 的落点可能不准（「光谷大道地铁站」会落到附近别的地方），
-//!   所以这里的坐标**只用于判国家**，不用于算路。
-//! - Nominatim 作备份，但它的 User-Agent 必须伪装成浏览器，自定义 UA 直接 403。
+//! 选 provider 要先知道坐标属于哪国，而「文本 → 坐标」本身就得调 provider，国内厂商
+//! 又只覆盖中国大陆；故拆两阶段，阶段二按国家码选定 provider 后用它的地点搜索精化
+//! （地铁站、出入口只有本土服务解析得准）。Photon 落点可能不准，坐标只用于判国家。
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -24,18 +10,14 @@ use serde_json::Value;
 use crate::http::{encode_component, get_json};
 use crate::models::LatLng;
 
-/// 一次全球定位的结果。
 #[derive(Debug, Clone, PartialEq)]
 pub struct GlobalHit {
     /// 坐标（WGS-84）。
     pub location: LatLng,
-    /// 国家码，大写。查不到是 `None`。
+    /// 国家码，ISO 3166-1 alpha-2，大写。查不到是 `None`。
     pub country_code: Option<String>,
-    /// 国家名。
     pub country: Option<String>,
-    /// 命中的地名。
     pub name: Option<String>,
-    /// 来自哪个服务。
     pub source: &'static str,
 }
 
@@ -72,12 +54,8 @@ struct PhotonProperties {
     city: Option<String>,
 }
 
-// User-Agent 由 `http::client` 统一设置成浏览器风格。不要在请求里另设一个：
-// Nominatim 见到自定义 UA 直接 403，而那个 403 看起来像「服务挂了」，
-// 排查方向会完全跑偏。
+// User-Agent 由 `http::client` 统一设置成浏览器风格；Nominatim 见到自定义 UA 返回 403。
 
-/// Photon 主查询。任何一步失败都返回 `None` —— 这是「判不出国家」而不是错误，
-/// 调用方会退化成顺序探测。
 fn try_photon(query: &str) -> Option<GlobalHit> {
     let url = format!(
         "https://photon.komoot.io/api/?q={}&limit=1",
@@ -89,8 +67,6 @@ fn try_photon(query: &str) -> Option<GlobalHit> {
     if coords.len() < 2 {
         return None;
     }
-    // GeoJSON: [lng, lat]。写反的现象是坐标跑到完全错误的半球，
-    // 而国家码还是对的 —— 判国家不受影响，所以只有算路时才会暴露，很难查。
     let (lng, lat) = (coords[0], coords[1]);
     let props = feature.properties?;
     Some(GlobalHit {
@@ -105,7 +81,6 @@ fn try_photon(query: &str) -> Option<GlobalHit> {
     })
 }
 
-/// Nominatim 备份。
 fn try_nominatim(query: &str) -> Option<GlobalHit> {
     let url = format!(
         "https://nominatim.openstreetmap.org/search?q={}&format=json&limit=1",
@@ -136,10 +111,7 @@ fn try_nominatim(query: &str) -> Option<GlobalHit> {
     })
 }
 
-/// 查一个地点属于哪个国家。Photon 主，Nominatim 备。
-///
-/// 两个都失败返回 `None`：调用方应退化为「按已配置的顺序探测」，
-/// 而不是报「查不到这个地点」—— 那句话会让人以为地名写错了。
+/// 查一个地点属于哪个国家。两个服务都失败返回 `None`，调用方应退化为顺序探测。
 #[must_use]
 pub fn global_locate(query: &str) -> Option<GlobalHit> {
     try_photon(query).or_else(|| try_nominatim(query))

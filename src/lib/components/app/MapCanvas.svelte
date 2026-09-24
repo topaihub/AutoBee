@@ -1,17 +1,10 @@
 <script lang="ts">
   /**
-   * 百度 JS API GL 矢量底图：底图自带道路、地铁线路与站点标注；AutoBee 叠加当前路线。
-   *
-   * # 坐标顺序的坑
-   *
-   * `BMapGL.Point` 是 **(lng, lat)**，经度在前 —— 与百度 Web 服务 API 的
-   * `location=lat,lng` 相反(同一家两套接口两个顺序)。写反了不报错，
-   * 点直接落到地球另一边。本文件一律经由 `pt()` 构造，不散写。
-   *
-   * # 坐标系
-   *
-   * BMapGL 底图是 BD-09。后端返回的 `plan.crs` 必须是 `BD09`，否则整条路线
-   * 相对底图偏移几百米且不报错 —— 所以坐标系不匹配时显式提示，不静默画。
+   * 百度 JS API GL 矢量底图，AutoBee 在上面叠加路线。
+   * `BMapGL.Point` 是 (lng, lat)，与百度 Web 服务 API 的 `location=lat,lng` 相反；
+   * 写反不报错，点会落到地球另一边，所以一律经 `pt()` 构造。
+   * 底图是 BD-09：`plan.crs` 不是 `BD09` 时路线整体偏移几百米且不报错，
+   * 所以坐标系不匹配时显式提示，不静默画。
    */
   import { planner } from "$lib/state/planner.svelte";
   import type { Crs, LatLng, RoutePlan } from "$lib/ipc/types";
@@ -41,16 +34,10 @@
   let { class: className = "" }: { class?: string } = $props();
   let container = $state<HTMLDivElement | null>(null);
   let map: BaiduMap | null = null;
-  /** 叠加物要自己记着：BMapGL 只有 add/removeOverlay，没有腾讯那种可整体 setGeometries 的图层。 */
   let routeOverlays: Overlay[] = [];
   let markerOverlays: Overlay[] = [];
   let loadError = $state("");
   let mapReady = $state(false);
-  /**
-   * 坐标系不匹配的提示。BMapGL 底图是 BD-09,后端按设置页的 `out_crs` 转换 --
-   * 两者不一致时路线相对底图偏移几百米,而**不会报任何错**。静默画出来
-   * 比不画更坏:用户会照着错的线去坐车。
-   */
   let crsWarning = $state("");
 
   function crsMismatch(crs: Crs): string {
@@ -61,7 +48,6 @@
     return (window as unknown as { BMapGL?: BaiduApi }).BMapGL;
   }
 
-  /** 唯一的 `Point` 构造入口。经度在前 —— 见文件头注释。 */
   function pt(location: LatLng): Point {
     const BMapGL = sdk();
     if (!BMapGL) throw new Error("BMapGL 未加载");
@@ -70,8 +56,7 @@
 
   $effect(() => {
     if (container) void initMap(container);
-    // destroy() 是官方明写的硬要求：不调的话 WebGL 上下文、事件监听与瓦片
-    // 缓存都留在内存里。组件在路由切换时会反复挂载,漏一次积一份。
+    // destroy() 是硬要求：组件在路由切换时反复挂载，不调则 WebGL 上下文、监听与瓦片缓存留在内存里。
     return () => {
       routeOverlays.length = 0;
       markerOverlays.length = 0;
@@ -93,10 +78,7 @@
   async function initMap(element: HTMLElement): Promise<void> {
     try {
       const BMapGL = await loadSdk();
-      // 键名必须是 enableIconClick，不能写 enableMapClick:SDK 的
-      // compatMapOptions 把后者翻成前者的分支条件是 `if(!apiVersionIsGL())`,
-      // GL 版压根不进那个分支 -- 写 enableMapClick 会被静默忽略,底图 POI
-      // 仍然可点。这一条官方文档的选项表里也只列 enableIconClick。
+      // GL 版只认 enableIconClick，写 enableMapClick 会被静默忽略。
       map = new BMapGL.Map(element, { enableIconClick: false });
       // centerAndZoom 必须先调：没调过的 Map 是未初始化状态，后续 addOverlay 全部无效。
       map.centerAndZoom(new BMapGL.Point(116.404, 39.915), 12);
@@ -109,13 +91,8 @@
     }
   }
 
-  /**
-   * 取 AK 并注入 SDK。
-   *
-   * 不用官方的 `api?v=3.0&type=webgl` 入口:那个 loader 内部是 `document.write`,
-   * 页面加载完之后再执行会把整个文档冲掉。直接注入它内部指向的 `getscript`
-   * 与配套 `bmap.css`(缺 CSS 的表现是控件与文字标注错位,不是白屏)。
-   */
+  // 不用官方 `api?v=3.0&type=webgl` 入口：它内部是 `document.write`，页面加载完后执行会冲掉整个文档。
+  // 改为注入其指向的 `getscript` 与 `bmap.css`（缺 CSS 的表现是控件与文字标注错位，不是白屏）。
   async function loadSdk(): Promise<BaiduApi> {
     const existing = sdk();
     if (existing) return existing;
@@ -147,7 +124,7 @@
     throw new Error("百度地图 SDK 加载超时");
   }
 
-  /** 清掉一批叠加物并把数组清空。BMapGL 不会替你回收，漏了就是越画越花。 */
+  /** BMapGL 不会替你回收叠加物，漏 removeOverlay 就是越画越花。 */
   function clearOverlays(overlays: Overlay[]): void {
     if (!map) return;
     for (const overlay of overlays) map.removeOverlay(overlay);
@@ -168,7 +145,6 @@
         strokeColor: segment.line?.color ?? "#9aa0a6",
         strokeWeight: isWalk ? 4 : 7,
         strokeOpacity: 0.95,
-        // 步行段画虚线：与地铁/公交段并排时一眼能分出来，不靠记颜色。
         strokeStyle: isWalk ? "dashed" : "solid",
       });
       map.addOverlay(line);
@@ -179,25 +155,20 @@
       Number.isFinite(point.lat) && Number.isFinite(point.lng)
       && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180,
     );
-    // setViewport 替代腾讯的 fitBounds：它按传入点集自己算中心与级别，
-    // 所以不必再 setCenter + 夹 zoom。margins 是上右下左的留白像素。
+    // setViewport 按点集自算中心与级别，不必再 setCenter；margins 是上右下左留白像素。
     const viewport = boundsAreValid
       ? routeBounds
       : [plan.origin.location, plan.destination.location];
     map.setViewport(viewport.map(pt), { margins: [72, 72, 72, 72] });
   }
 
-  /**
-   * 端点与生活圈服务点的打点。跟 `renderPlan` 分开是必须的:生活圈现在有
-   * 自己的地点输入,没规划过路线时也要能在图上看到服务点 -- 写在 renderPlan
-   * 里会被它的 `!plan` 提前返回吞掉。
-   */
+  /** 跟 `renderPlan` 分开：生活圈有自己的地点输入，写在 renderPlan 里会被它的 `!plan` 提前返回吞掉。 */
   function renderMarkers(plan: RoutePlan | null): void {
     const BMapGL = sdk();
     if (!map || !BMapGL) return;
     clearOverlays(markerOverlays);
 
-    /** 一个 SVG data URL 一个 Icon。anchor 让针尖而不是图片中心落在坐标上。 */
+    /** anchor 让针尖而不是图片中心落在坐标上。 */
     const place = (location: LatLng, src: string, w: number, h: number, anchorX: number, anchorY: number): void => {
       const icon = new BMapGL.Icon(src, new BMapGL.Size(w, h), {
         anchor: new BMapGL.Size(anchorX, anchorY),
@@ -220,7 +191,6 @@
     for (const poi of pois) {
       place(poi.location, dot("#2563eb"), 14, 14, 7, 7);
     }
-    // 没有路线时视野不会被 renderPlan 摆好,自己对到生活圈中心上。
     if (!plan && center && pois.length > 0) {
       map.setCenter(pt(center.location));
       if (map.getZoom() < 14) map.setZoom(14);
@@ -248,7 +218,7 @@
   {#if !loadError && crsWarning}
     <div role="alert" class="absolute inset-x-3 top-3 z-10 rounded-md border border-warning bg-card px-3 py-2 text-sm text-warning shadow-sm">{crsWarning}</div>
   {/if}
-  <!-- 数据来源标注:比赛要求可见地标出底图来源,也让用户知道这张图是谁给的。 -->
+  <!-- 比赛要求底图来源可见。 -->
   <div class="absolute bottom-1 left-2 z-10 text-[11px] text-muted-foreground">底图 © 百度地图</div>
   <div class="absolute right-3 bottom-3 z-10 flex flex-col overflow-hidden rounded-md border bg-card shadow-sm">
     <button type="button" aria-label="放大" class="size-8 text-lg hover:bg-accent" onclick={() => zoomBy(1)}>+</button>

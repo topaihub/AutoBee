@@ -15,7 +15,7 @@
 
 pub mod crypto;
 pub mod resolve;
-mod schema;
+pub(crate) mod schema;
 pub mod store;
 
 use serde::{Deserialize, Serialize};
@@ -24,9 +24,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MapProviderDto {
-    /// 标识，也是 settings 里 default_providers 用的值。
+    /// 标识,也是 settings 里 default_providers 用的值。
     pub slug: String,
-    /// 显示名。
     pub name: String,
     /// 内置的六家。前端据此决定是否显示删除按钮。
     pub is_preset: bool,
@@ -35,16 +34,20 @@ pub struct MapProviderDto {
     /// 用户改过的优先级。`None` 表示用注册表默认值。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<u32>,
-    /// 注册表的默认优先级，前端显示「已调整」时用得着。
+    /// 注册表的默认值,前端显示「已调整」时用得着。
     pub default_priority: u32,
-    /// 覆盖范围，如「CN」或「全球」。
+    /// 如「CN」或「全球」。
     pub coverage: String,
-    /// 原始坐标系，如「GCJ02」。
+    /// 如「GCJ02」。
     pub coord_sys: String,
-    /// 支持的能力，中文，如「公交 · 地铁 · 步行」。
+    /// 中文,如「公交 · 地铁 · 步行」。
     pub capabilities: String,
-    /// 掩码后的 Key。空串表示还没填。
+    /// 掩码后的服务端 Key。空串表示还没填。
     pub api_key_masked: String,
+    /// 掩码后的**浏览器端** Key。空串表示还没填,其余厂商恒为空串。
+    ///
+    /// 只有百度需要第二把,原因见 [`resolve::baidu_sdk_key`](super::resolve)。
+    pub browser_key_masked: String,
     /// adapter 是否已实现。未实现的在界面上标「待接入」——
     /// 不标的话用户填了 Key 却永远选不中它。
     pub implemented: bool,
@@ -56,21 +59,19 @@ pub struct MapProviderDto {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MapProviderInput {
-    /// 标识。
     pub slug: String,
-    /// 显示名。
     pub name: String,
-    /// 是否启用。
     pub enabled: bool,
-    /// 用户改过的优先级。`None` 表示恢复默认。
+    /// `None` 表示恢复默认。
     #[serde(default)]
     pub priority: Option<u32>,
-    /// 新密钥的**明文**。`None` 表示没动过，保留库里那份。
-    ///
-    /// 这个区分不是洁癖：前端拿到的是掩码，用户不改时框里就是掩码串，
+    /// 明文。`None` 表示没动过,保留库里那份 —— 前端框里是掩码串,
     /// 原样提交会把 `FAKE********TEST` 当成真 Key 存进去。
     #[serde(default)]
     pub api_key: Option<String>,
+    /// 新的**浏览器端**密钥明文。`None` 同上,表示没动过。
+    #[serde(default)]
+    pub browser_key: Option<String>,
 }
 
 /// 「含较长步行」的默认阈值，米。§4.2 取的保守值。
@@ -85,26 +86,18 @@ pub const DEFAULT_MANY_TRANSFERS: u32 = 2;
 pub struct SettingsDto {
     /// 按地点自动选服务商。
     pub auto_provider: bool,
-    /// 输出坐标系。
     pub out_crs: String,
-    /// 允许跨境路线。
     pub allow_cross_border: bool,
-    /// 底图瓦片源。
     pub tile_source: String,
-    /// 固定链路（关掉自动选择时生效）。
+    /// 固定链路,关掉自动选择时生效。
     pub default_providers: Vec<String>,
-    /// 是否在主界面显示日志面板。
-    ///
-    /// 只影响界面，不进 [`route_core::config::Settings`] —— 那个结构体是喂给
-    /// 算路的，掺进一个界面开关会让「改了显示偏好」看起来像「改了算路配置」。
+    /// 只影响界面,不进 [`route_core::config::Settings`] —— 那个结构体是喂给
+    /// 算路的,掺进界面开关会让「改了显示偏好」看起来像「改了算路配置」。
     pub show_logs: bool,
-    /// 「含较长步行」提醒的阈值，米。
-    ///
-    /// 与 `show_logs` 同理只影响界面：它决定标签显不显示，不参与算路与评分，
-    /// 所以不进 [`route_core::config::Settings`]。§4.2 末尾要求它可配置、
-    /// 不许写死在 UI 里。
+    /// 「含较长步行」提醒阈值,米。同 `show_logs` 只影响界面。
+    /// §4.2 末尾要求它可配置、不许写死在 UI 里。
     pub long_walk_meters: u32,
-    /// 「换乘较多」提醒的阈值，次。超过这个数才提醒。
+    /// 「换乘较多」提醒阈值,次。超过这个数才提醒。
     pub many_transfers: u32,
 }
 
@@ -112,8 +105,109 @@ pub struct SettingsDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TestResult {
-    /// 是否可用。
     pub ok: bool,
-    /// 结论文字，可直接展示。
+    /// 结论文字,可直接展示。
     pub message: String,
+}
+
+/// 一个大模型服务入口的协议。
+///
+/// 「中转商」不是单独的抽象:它就是 `base_url` 指向代理、协议选
+/// [`Self::OpenaiChat`] 的普通 provider。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LlmProtocol {
+    /// Anthropic `/v1/messages`。
+    AnthropicMessages,
+    /// OpenAI `/v1/responses`。
+    OpenaiResponses,
+    /// OpenAI `/v1/chat/completions`。绝大多数中转商是这个。
+    OpenaiChat,
+}
+
+impl LlmProtocol {
+    /// 存进库里的字符串。
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::AnthropicMessages => "anthropic-messages",
+            Self::OpenaiResponses => "openai-responses",
+            Self::OpenaiChat => "openai-chat",
+        }
+    }
+
+    /// 从库里的字符串读回。
+    ///
+    /// 认不出的值回落到 [`Self::OpenaiChat`]：库里的协议名可能来自更新的版本，
+    /// 那时整个设置页应当仍然能打开让用户改，而不是一行坏数据全页报错。
+    #[must_use]
+    pub fn from_str_or_default(raw: &str) -> Self {
+        match raw {
+            "anthropic-messages" => Self::AnthropicMessages,
+            "openai-responses" => Self::OpenaiResponses,
+            _ => Self::OpenaiChat,
+        }
+    }
+}
+
+/// 下发给前端的一个大模型服务入口。Key 已掩码。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmProviderDto {
+    pub id: String,
+    pub name: String,
+    /// 形如 `https://xxx/v1`。
+    pub base_url: String,
+    pub protocol: LlmProtocol,
+    pub enabled: bool,
+    /// 空串表示还没填。
+    pub api_key_masked: String,
+    /// 用户挑中的模型。
+    pub models: Vec<LlmModelDto>,
+}
+
+/// 用户从某个入口挑中的一个模型。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmModelDto {
+    /// 供应商侧的模型标识。
+    pub model: String,
+    /// `None` 则显示 `model`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+    pub tools_ok: bool,
+}
+
+/// 前端提交的一个服务入口。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmProviderInput {
+    /// `None` 表示新建。
+    #[serde(default)]
+    pub id: Option<String>,
+    pub name: String,
+    pub base_url: String,
+    pub protocol: LlmProtocol,
+    pub enabled: bool,
+    /// 明文。`None` 或空串表示没动过,保留库里那份 ——
+    /// 前端框里是掩码串,原样提交不能把掩码写成真 Key。
+    #[serde(default)]
+    pub api_key: Option<String>,
+}
+
+/// 前端提交的一条模型选择。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmModelInput {
+    pub model: String,
+    #[serde(default)]
+    pub alias: Option<String>,
+    #[serde(default = "默认支持工具")]
+    pub tools_ok: bool,
+}
+
+/// `tools_ok` 缺省为 true：绝大多数在用的模型都支持，
+/// 缺省成 false 会让工具静默不可用而界面上看不出原因。
+const fn 默认支持工具() -> bool {
+    true
 }
