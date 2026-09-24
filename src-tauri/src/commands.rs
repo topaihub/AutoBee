@@ -202,16 +202,27 @@ pub async fn plan_route(
     mode: String,
     sort: String,
 ) -> Result<RoutePlan, AppError> {
-    let mode = match mode.as_str() {
-        "bus" => TravelMode::Bus,
-        "walking" => TravelMode::Walking,
-        _ => TravelMode::Subway,
-    };
-    let sort = if sort == "distance" {
-        SortBy::Distance
-    } else {
-        SortBy::Time
-    };
+    // 不认识就报错而不是兜底猜:调用方是大模型时,它得知道自己填错了才能重试。
+    let mode = TravelMode::parse(&mode).ok_or_else(|| {
+        AppError::new(
+            "BAD_MODE",
+            format!(
+                "不认识的出行方式「{mode}」,可选:{}",
+                TravelMode::ALL.join(" / ")
+            ),
+            400,
+        )
+    })?;
+    let sort = SortBy::parse(&sort).ok_or_else(|| {
+        AppError::new(
+            "BAD_SORT",
+            format!(
+                "不认识的排序依据「{sort}」,可选:{}",
+                SortBy::ALL.join(" / ")
+            ),
+            400,
+        )
+    })?;
 
     tauri::async_runtime::spawn_blocking(move || {
         tracing::info!(from = %from, to = %to, ?mode, ?sort, "开始规划路线");

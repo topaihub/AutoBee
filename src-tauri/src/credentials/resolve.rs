@@ -53,10 +53,14 @@ fn load_settings_from(store: &Store) -> Result<Settings, AppError> {
         .pref("auto_provider")?
         .map(|v| v != "0")
         .unwrap_or(true);
+    // 缺键时必须与 `Settings::default()` 一致（GCJ02）。全新安装时 prefs 没有
+    // 这一行（schema.rs 的 SEED 只种服务商），而 schema.rs 那条迁移只改写
+    // 已存在的 WGS84 行、键不存在时不做事。这里若退回 WGS84，底图（腾讯
+    // GCJ-02）与路线就差一个坐标系：偏移几百米，不报错也不崩溃。
     let out_crs = store
         .pref("out_crs")?
         .and_then(|v| Crs::parse(&v))
-        .unwrap_or(Crs::Wgs84);
+        .unwrap_or(Settings::default().out_crs);
     let allow = store
         .pref("allow_cross_border")?
         .map(|v| v == "1")
@@ -112,11 +116,13 @@ pub fn load_settings() -> Result<SettingsDto, AppError> {
 pub fn save_settings(dto: &SettingsDto) -> Result<(), AppError> {
     let store = Store::open()?;
     store.set_pref("auto_provider", if dto.auto_provider { "1" } else { "0" })?;
-    // 坐标系认不出时回落到 WGS-84 并记一条警告：写进库一个非法值的话
-    // 每次算路都会走这个回落，而界面上显示的是他选的那个。
+    // 坐标系认不出时回落到默认坐标系并记一条警告：写进库一个非法值的话
+    // 每次算路都会走读取侧的回落，而界面上显示的是他选的那个。
+    // 回落值与 `Settings::default()` 同源，三处（默认、读、写）不许分叉。
     let crs = Crs::parse(&dto.out_crs).unwrap_or_else(|| {
-        tracing::warn!(value = %dto.out_crs, "不认识的坐标系，回落到 WGS84");
-        Crs::Wgs84
+        let fallback = Settings::default().out_crs;
+        tracing::warn!(value = %dto.out_crs, ?fallback, "不认识的坐标系,回落到默认");
+        fallback
     });
     store.set_pref("out_crs", &format!("{crs:?}"))?;
     store.set_pref(
@@ -141,7 +147,9 @@ mod tests {
         let store = Store::memory().unwrap();
         let settings = load_settings_from(&store).unwrap();
         assert!(settings.auto_provider);
-        assert_eq!(settings.out_crs, Crs::Wgs84);
+        // 不写字面量：这一条的意义是「两处默认值不许分叉」，
+        // 写死 GCJ02 的话改 `Settings::default()` 时这里不会响。
+        assert_eq!(settings.out_crs, Settings::default().out_crs);
         assert!(!settings.allow_cross_border);
         assert_eq!(settings.tile_source, DEFAULT_TILE_SOURCE);
         assert!(settings.default_providers.is_empty());
@@ -176,10 +184,16 @@ mod tests {
     }
 
     #[test]
-    fn 非法坐标系退回_wgs84() {
+    fn 非法坐标系退回默认坐标系() {
+        // 库里存了个认不出的坐标系（换版本、手改 db）。退回值必须与
+        // `Settings::default()` 同一个，否则底图与路线差一个坐标系:
+        // 路线整体偏移几百米，而且不报错。
         let store = Store::memory().unwrap();
         store.set_pref("out_crs", "火星坐标").unwrap();
-        assert_eq!(load_settings_from(&store).unwrap().out_crs, Crs::Wgs84);
+        assert_eq!(
+            load_settings_from(&store).unwrap().out_crs,
+            Settings::default().out_crs
+        );
     }
 
     #[test]

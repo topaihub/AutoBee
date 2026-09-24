@@ -31,7 +31,9 @@ impl LatLng {
         let d_lat = (other.lat - self.lat).to_radians();
         let d_lng = (other.lng - self.lng).to_radians();
         let a = (d_lat / 2.0).sin().powi(2)
-            + self.lat.to_radians().cos() * other.lat.to_radians().cos() * (d_lng / 2.0).sin().powi(2);
+            + self.lat.to_radians().cos()
+                * other.lat.to_radians().cos()
+                * (d_lng / 2.0).sin().powi(2);
         2.0 * R * a.sqrt().asin()
     }
 }
@@ -139,6 +141,25 @@ pub enum TravelMode {
     Walking,
 }
 
+impl TravelMode {
+    /// 解析前端或模型给出的字符串。
+    ///
+    /// 不认识就返回 `None` 而不是猜一个默认值:调用方是大模型时,猜出来的
+    /// 结果它分辨不出错,也就无法重试。
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "subway" => Some(Self::Subway),
+            "bus" => Some(Self::Bus),
+            "walking" => Some(Self::Walking),
+            _ => None,
+        }
+    }
+
+    /// 全部合法值,用于错误信息里告诉调用方该填什么。
+    pub const ALL: [&'static str; 3] = ["subway", "bus", "walking"];
+}
+
 /// 方案排序依据。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -147,6 +168,21 @@ pub enum SortBy {
     Time,
     /// 距离最短。
     Distance,
+}
+
+impl SortBy {
+    /// 解析前端或模型给出的字符串。理由同 [`TravelMode::parse`]。
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "time" => Some(Self::Time),
+            "distance" => Some(Self::Distance),
+            _ => None,
+        }
+    }
+
+    /// 全部合法值。
+    pub const ALL: [&'static str; 2] = ["time", "distance"];
 }
 
 /// 交通工具。
@@ -369,6 +405,7 @@ pub struct Degraded {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "测试里断言失败即测试失败")]
 mod tests {
     use super::*;
 
@@ -426,6 +463,30 @@ mod tests {
             serde_json::to_string(&SortBy::Distance).unwrap(),
             "\"distance\""
         );
-        assert_eq!(serde_json::to_string(&Vehicle::Subway).unwrap(), "\"SUBWAY\"");
+        assert_eq!(
+            serde_json::to_string(&Vehicle::Subway).unwrap(),
+            "\"SUBWAY\""
+        );
+    }
+
+    #[test]
+    fn 出行方式与排序拒绝不认识的值而不是猜一个() {
+        // 曾经的行为是 `_ => Subway` / else Time：模型写 "transit" 会静默
+        // 得到地铁+耗时的结果，自己不知道参数错了，也就无从重试。
+        assert_eq!(TravelMode::parse("transit"), None);
+        assert_eq!(TravelMode::parse("地铁"), None);
+        assert_eq!(SortBy::parse("fastest"), None);
+        assert_eq!(SortBy::parse(""), None);
+
+        // serde 名即合法值，两者必须能对上。
+        for (text, mode) in [
+            ("subway", TravelMode::Subway),
+            ("bus", TravelMode::Bus),
+            ("walking", TravelMode::Walking),
+        ] {
+            assert_eq!(TravelMode::parse(text), Some(mode));
+            assert!(TravelMode::ALL.contains(&text));
+        }
+        assert_eq!(SortBy::parse(" Distance "), Some(SortBy::Distance));
     }
 }
