@@ -695,12 +695,18 @@ AutoBee 取**随机** hex boundary id:确定性 id 可被第三方预测,而 MCP
 
 先跳过 SSE 少一半复杂度:协议对不对、鉴权头对不对,在非流式下调试快得多。
 
-- [ ] **M2-1 会话两张表**
-  - `schema.rs` 追加 `llm_conversations` / `llm_messages`(4.2 的 SQL),`VERSION` 再加一。
-  - 判据:单测「写一轮对话再读出来,顺序与 role 不变」。
-- [ ] **M2-2 `llm/http.rs` 一次性请求**
-  - 只实现 `openai-chat` 一种协议。请求体 `{model, messages}`,解析 `choices[0].message.content`。
-  - 判据:`cargo test -p autobee` 全绿(这一步的单测只覆盖请求体拼装与响应解析,不发真请求)。
+- [x] **M2-1 会话两张表**(已完成 2026-09-24,实际是三张)
+  - `schema.rs` 追加 `llm_conversations` / `llm_messages`,`VERSION` 6→7。**实际加了三张** —— `mcp_servers` 一起建了:同一次 `VERSION` 变更能带多张表,分两次加等于让老库多跑一轮迁移判断而没有任何好处。
+  - 读写落在新文件 `llm/conversations.rs`,不是 `store.rs`。前者是会话记录,后者是入口密钥,混在一个文件里将来分不开。
+  - **`read_conversation` 按 `(created_at, id)` 排序,不能只按 `created_at`。** 一次工具调用产生的 assistant 轮与 tool 轮几乎必然落在同一秒,只按时间戳排序时 SQLite 不保证稳定,界面回放会把因果顺序颠倒(先看到工具结果,再看到发起调用的那一轮)。
+  - `new_id` 从 `store.rs` 提为 `pub(super)` 共用,不留第二份实现。
+  - 判据实测:`cargo test -p autobee-shell` **111 passed / 0 failed**。含「写一轮对话再读出来,顺序与 role 不变」与级联删除两条。
+- [x] **M2-2 一次性请求**(已完成 2026-09-24,落点与原文不同)
+  - **原文说写 `llm/http.rs`,实际拆成三处**:HTTP 传输在 `core/src/http.rs`(`post_json` / `post_stream` / `LLM_CLIENT`),协议差异在 `llm/protocol.rs`,一次性对话在 `llm/chat.rs` 的 `one_shot`。理由:传输层要与地图侧共用连接池,协议层要被流式与非流式共用,写成一个 `llm/http.rs` 会让 M4 把它整个拆一遍。
+  - **`LLM_CLIENT` 超时 600 秒,与地图的 10 秒分开。** 地图那个超时对大模型是必然超时,共用一个 Client 等于每次长回答都在 10 秒处断掉。
+  - **三种协议全做了**,不是原文的「只实现 `openai-chat` 一种」:三者的差异只有端点路径、消息体形状、tool 声明字段三处,集中在 `protocol.rs` 里一次写完比留两个将来补要省。但 **tool calling 只有 `openai-chat` 支持**,另两个协议传了非空 `tools` 会报 `TOOLS_UNSUPPORTED` 而不是静默丢掉 —— 静默丢掉的后果是模型答得像在用工具但其实没调用。
+  - **截断的统一折叠**:`openai-chat` 的 `finish_reason == "length"`、`openai-responses` 的 `status == "incomplete"`、`anthropic` 的 `stop_reason == "max_tokens"` 三者都折成 `TurnOutcome::Truncated`,不折成 `ToolCalls`。M3-2 依赖这一层区分来整批作废。
+  - 判据实测:`cargo test -p autobee-shell` **111 passed / 0 failed**,clippy `-D warnings` **0 问题**(确认输出含 `Checking autobee-shell`,非缓存空转)。单测只覆盖请求体拼装与响应解析,不发真请求。
 - [ ] **M2-3 `llm_chat_start` 非流式版**
   - 直接返回完整回复字符串,不发 event。`convId` 为 `None` 时新建会话,标题取用户首句前 20 字(6.2)。
   - 判据:能与模型来回对话。
@@ -712,12 +718,13 @@ AutoBee 取**随机** hex boundary id:确定性 id 可被第三方预测,而 MCP
 
 这一组是整个方案唯一无参照实现的部分,也是最容易做出「看着能用、其实在胡说」的一组。四个任务里有两个的判据是**与直接点规划的结果逐字对比**,不是「模型答得挺像」。
 
-- [ ] **M3-1 `llm/tools.rs` 的 schema 与裁剪结构**
-  - 三个 tool 的 JSON Schema 照 5.2 写:`plan_route` / `search_place` / `life_circle`。
-  - `mode` / `sort` / `package` 的 enum 值**从 Rust 侧生成**,不手抄。手抄错一个值,模型收到的是反序列化失败,它会拿同一个错值重试到轮次上限(5.2)。
-  - `TravelMode::ALL`(`models.rs:131`)、`SortBy::ALL`(`:151`)、`LifeCirclePackage::ALL`(`:281`)**三个都已存在**,直接用。原文「`LifeCirclePackage` 没有 `ALL`,要先补一个」是过期的 —— 实读已确认它在,这一条少一件事。
-  - 裁剪结构按 5.4 单独定义:丢掉 `Segment.points`、`routes` 最多 3 条、`pois` 每类最多 5 个、`crs` **必须保留且不许 `skip_serializing_if`**。不复用前端 DTO。
-  - 判据:单测「schema 里的 enum 值与 `TravelMode::ALL` 逐字相等」;单测「裁剪后的 JSON 里 `points` 字段不存在、`crs` 字段存在」。第二条是 5.3 那个静默偏差的唯一自动化防线。
+- [x] **M3-1 `llm/tools.rs` 的 schema 与裁剪结构**(已完成 2026-09-24)
+  - 三个 tool 的 JSON Schema 照 5.2 写完:`plan_route` / `search_place` / `life_circle`。
+  - enum 值直取 `TravelMode::ALL` / `SortBy::ALL` / `LifeCirclePackage::ALL` / `Crs::ALL`,不手抄。
+  - **`life_circle` 加了原文没有的可选 `crs` 参数。** 这是实现时发现的真缺陷:core 的 `life_circle` 只吃 BD-09,而 `plan_route` / `search_place` 回给模型的坐标是 `settings.out_crs`(默认 GCJ-02)。模型把上一轮刚拿到的坐标原样填进 `life_circle` 是最自然的动作,结果是整体偏移几百米**而完全不报错** —— 又一个 5.3 那类静默偏差。按 `map.rs:329-340` 的现成做法双向换算,认不出的值报 `BAD_CRS`。
+  - **不认识的 `mode` / `sort` / `package` 报错,不兜底成默认值。** 兜底的后果是模型分辨不出自己拿到的是「按它要求算的」还是「按默认参数算的」,也就无从重试。
+  - 裁剪:丢掉 `Segment.points` 只留 `pointCount` 与首末点,`routes` 最多 3 条,`pois` 每类最多 5 个,`crs` 保留且无 `skip_serializing_if`。整体上限 8000 字符,切点先对齐 `char_boundary` 再回退到最近换行 —— 按字节切会把一个汉字劈成两半,模型收到的是乱码而不是截断。
+  - 判据实测:`cargo test -p autobee-shell` **111 passed / 0 failed**。含 schema enum 与 `TravelMode::ALL` 逐字相等、裁剪后 `points` 不存在而 `crs` 存在两条。
 - [ ] **M3-2 `llm/agent.rs` 回合循环**
   - 轮次上限 5;达上限仍要求调工具则停下并告知用户,不无限循环。
   - tool 报错也回灌:`AppError` 的 `code` + 中文 `message` 直接序列化发回,让模型换参数重试(5.5)。
@@ -754,11 +761,13 @@ AutoBee 取**随机** hex boundary id:确定性 id 可被第三方预测,而 MCP
 
 ### M5 MCP
 
-- [ ] **M5-1 `llm/mcp.rs` 客户端**
-  - 手写 Streamable HTTP,只实现四条消息:`initialize` / `notifications/initialized` / `tools/list` / `tools/call`(7.3.1)。
-  - `initialize` 的 result **必须校验含 `protocolVersion`**,缺了就当握手失败(nullclaw `mcp.zig:74-80` 的 `error.InvalidHandshake`)。7.3.1 那张表的第 2 步是这条校验而不是一条消息 —— 跳过它,一个返回 200 但内容不对的端点会被当成连上了,然后在 `tools/list` 处以一个莫名其妙的解析错误失败。
-  - 单 server 失败只跳过该 server,不影响其余(7.3.3)。
-  - 判据:单测覆盖「一个 server 连不上时,其余 server 的 tool 仍在列表里」。
+- [x] **M5-1 `llm/mcp.rs` 客户端**(已完成 2026-09-24)
+  - 手写 Streamable HTTP,四条消息:`initialize` / `notifications/initialized` / `tools/list` / `tools/call`。不引 `rmcp`。
+  - **四条全部走 `post_stream` 而非 `post_json`**,原文没写这一点但它是必须的:`mcp-session-id` 在**响应头**里(`post_json` 只回 body,拿不到),而且服务端可以把 JSON-RPC 响应包在 SSE 的 `data:` 行里返回 —— 只按纯 JSON 解析会在这类服务端上直接失败。
+  - `initialize` 的 result 校验含 `protocolVersion`,缺了报握手失败。
+  - 单 server 失败只跳过该 server。
+  - **`wrap_external` 的伪造闭合标记检测比 nullclaw 原版严。** 移植时实测出原版三处可绕过:标记中间插零宽字符(U+200B / U+FEFF 等)原版判不匹配即放行;全角同形字母同理;闭合 `>>>` 找不到时原版 `return null` 放行,但那段内容拼上后文仍能闭合真边界。三处都补强了,并限 64 字符扫描窗口避免 O(n²)。
+  - 判据实测:`cargo test -p autobee-shell` **111 passed / 0 failed**,含「一个 server 连不上时其余 server 的 tool 仍在列表里」。clippy 顺带修掉 `mcp.rs:482` 的 `manual_ignore_case_cmp`。
 - [ ] **M5-2 `mcp_servers` 表 + 设置页**
   - URL 校验沿用「仅 HTTPS,或 HTTP 且 host 为本机」(nullclaw `config_types.zig:235-257` 的形状)。
   - 判据:填一个 `http://` 的外网地址被拒,填 `http://127.0.0.1:x` 通过。

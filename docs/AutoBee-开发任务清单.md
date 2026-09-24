@@ -31,16 +31,19 @@
 
 ## 当前进度(2026-09-24)
 
-**9 / 52 已完成。** C1 全组(4)、M0-1、大赛 M1-1 / M1-2 / M1-3 / M1-4。
+**35 / 52 已完成。** 剩 17 条:大赛 M1-5 与 M3 全组(5,全部要人工验证),
+大模型 M2-3 / M2-4、M3-2 ~ M3-4、M4-2 ~ M4-4、M5-2 ~ M5-5(12,纯代码)。
 
-**下一条是大赛 M1-5**,但它与 M1-4 都卡在同一处:需要真实窗口里的人工视觉确认。
+**下一条是大模型 M2-3**(`llm_chat_start` 非流式版)。大模型侧 M2 / M3 / M4 / M5
+四组各自的第一条已落地,剩下的是 command 层接线、agent 回合循环、SSE 与设置页。
+
+**仍被人工验证挡住的是大赛 M1-5 与 M3-1 ~ M3-4**:需要真实窗口里的视觉确认。
 M1-4 的代码与 API 面已验完,M1-5 五项里 4 项有实跑证据,只差「覆盖物屏幕可见」。
 本机 Chrome 无头启得起来却从不导航(5 种启动组合下本地服务器 0 请求),模型产不出
 这条证据 —— 需要用户跑一次。
 
-**不被它挡住的下一条是大赛 M2-1**(纯代码,给 `accessibility.ts` 加真实百度样本的
-排序测试)。质量门基线:前端 56、core 64、shell 40、CLI 12,svelte-check 350 files
-0 error,clippy `-D warnings` 0 问题。
+质量门基线(2026-09-24 实测):前端 **93**、core **64**、shell **111**、CLI **16**,
+svelte-check **355 files 0 error**,clippy `-D warnings` **0 问题**,fmt 干净。
 
 ## 为什么是这个顺序
 
@@ -355,15 +358,16 @@ shell 那 55 条按模块实测:`llm::store` 8、`llm::probe` 3、`credentials::
 
 ### 大模型 M2 非流式对话 — 行 666-682
 
-- [ ] **大模型 M2-1 会话两张表**
-- [ ] **大模型 M2-2 `llm/http.rs` 一次性请求**
+- [x] **大模型 M2-1 会话两张表** — 实际建了三张(`mcp_servers` 一起),`VERSION` 6→7
+- [x] **大模型 M2-2 一次性请求** — 落点不是 `llm/http.rs`:传输在 `core/src/http.rs`、
+  协议差异在 `llm/protocol.rs`、一次性对话在 `llm/chat.rs`。三种协议全做了
 - [ ] **大模型 M2-3 `llm_chat_start` 非流式版**
 - [ ] **大模型 M2-4 对话页最小实现**
 
 ### 大模型 M3 tool calling(核心)— 行 683-706
 
-- [ ] **大模型 M3-1 `llm/tools.rs` 的 schema 与裁剪结构** — 判据第二条
-  (裁剪后 `points` 不存在、`crs` 存在)是 §5.3 静默偏差的唯一自动化防线
+- [x] **大模型 M3-1 `llm/tools.rs` 的 schema 与裁剪结构** — 另加了原文没有的
+  `life_circle` 可选 `crs` 参数:core 只吃 BD-09 而回给模型的是 GCJ-02,原样填回会静默偏移
 - [ ] **大模型 M3-2 `llm/agent.rs` 回合循环** — 判据第三条
   (`stopReason == "length"` 时执行过的 tool 数为 0)必须有,是唯一能挡住那个无声错误的
 - [ ] **大模型 M3-3 `http.rs` 加 tools 字段**
@@ -372,7 +376,8 @@ shell 那 55 条按模块实测:`llm::store` 8、`llm::probe` 3、`credentials::
 
 ### 大模型 M4 流式 — 行 707-721
 
-- [ ] **大模型 M4-1 提依赖** — `cargo tree` 里不许出现第二个 async runtime
+- [x] **大模型 M4-1 不提依赖** — 推翻原文:`tokio` / `futures-util` / `uuid` 三条都不加。
+  `reqwest::blocking::Response` 实现了 `Read`,SSE 在阻塞线程里按块读即可
 - [ ] **大模型 M4-2 SSE 解析** — 单测必须含**跨 chunk 切断的行**,
   那是手写 SSE 解析唯一会错的地方
 - [ ] **大模型 M4-3 事件通道**
@@ -382,7 +387,8 @@ shell 那 55 条按模块实测:`llm::store` 8、`llm::probe` 3、`credentials::
 
 固定排最后,理由见上面。
 
-- [ ] **大模型 M5-1 `llm/mcp.rs` 客户端** — 手写,不引 rmcp(理由见 §7.3.2,有实测数据)
+- [x] **大模型 M5-1 `llm/mcp.rs` 客户端** — 手写,不引 rmcp。四条消息全走 `post_stream`:
+  session id 在响应头里,且响应可能包在 SSE `data:` 行里
 - [ ] **大模型 M5-2 `mcp_servers` 表 + 设置页** — 判据:外网 `http://` 被拒、
   `http://127.0.0.1:x` 通过
 - [ ] **大模型 M5-3 先打印真实 tool 清单** — 判据是往 §7.3 下方补一张真实 tool 名表;
