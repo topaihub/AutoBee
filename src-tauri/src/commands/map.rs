@@ -1,14 +1,7 @@
-//! Tauri command：只做参数校验与转发，业务逻辑全在核心层。
+//! 地图能力的 command：服务商档案、界面偏好、地点联想、算路、底图瓦片、
+//! 生活圈、日志回读。
 //!
-//! # 为什么都要走 `spawn_blocking`
-//!
-//! 核心层是阻塞的（HTTP + SQLite）。直接在 command 里调用会卡住 WebView
-//! 所在的线程，表现为「输入时界面卡顿、拖动地图不跟手」。
-//! 丢到阻塞线程池之后，界面线程只等结果。
-//!
-//! # 为什么每次都重新读配置
-//!
-//! 用户在设置页改完 Key，下一次算路必须立刻生效。见 `credentials::resolve`。
+//! 通用约定（`spawn_blocking`、每次重新读配置）见父模块 [`crate::commands`]。
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -18,10 +11,10 @@ use route_core::models::{
 use route_core::planner::{RouteQuery, plan_route as core_plan_route, suggest_places};
 use route_core::{factory, life_circle, models::Place};
 
-use crate::credentials::resolve;
-use crate::credentials::store::Store;
-use crate::credentials::{MapProviderDto, MapProviderInput, SettingsDto, TestResult};
-use crate::error::AppError;
+use autobee_shell::credentials::resolve;
+use autobee_shell::credentials::store::Store;
+use autobee_shell::credentials::{MapProviderDto, MapProviderInput, SettingsDto, TestResult};
+use autobee_shell::error::AppError;
 
 /// 后台任务本身崩了（panic）时的兜底。
 fn join_failed(detail: &str) -> AppError {
@@ -265,7 +258,7 @@ pub async fn get_tile(z: u8, x: u32, y: u32) -> Result<String, AppError> {
     tauri::async_runtime::spawn_blocking(move || {
         let config = resolve::load_config()?;
         let bytes = route_core::tiles::fetch_tile(
-            &crate::paths::tile_cache_dir(),
+            &autobee_shell::paths::tile_cache_dir(),
             &config.settings.tile_source,
             z,
             x,
@@ -352,9 +345,9 @@ pub async fn get_life_circle(
 ///
 /// 日志文件存在但读不动时返回错误。
 #[tauri::command]
-pub async fn read_logs(limit: usize) -> Result<Vec<crate::logs::LogEntry>, AppError> {
+pub async fn read_logs(limit: usize) -> Result<Vec<autobee_shell::logs::LogEntry>, AppError> {
     let limit = if limit == 0 { 200 } else { limit.min(2000) };
-    tauri::async_runtime::spawn_blocking(move || crate::logs::tail(limit))
+    tauri::async_runtime::spawn_blocking(move || autobee_shell::logs::tail(limit))
         .await
         .map_err(|error| join_failed(&error.to_string()))?
 }

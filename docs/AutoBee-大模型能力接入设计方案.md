@@ -635,7 +635,8 @@ MCP 结果来自第三方 server,属外部内容。按 2.2.2 的结论包裹:**�
 
 - [ ] **M0-1 拆成目录**
   - `src-tauri/src/commands.rs`(现 360 行)→ `commands/mod.rs` + `commands/map.rs`。现有 12 个 command 全进 `map.rs`,`mod.rs` 只做 `pub mod` 与 `pub use`。
-  - `lib.rs` 的 `generate_handler!` 列表不用改 —— `pub use` 之后路径不变。
+  - `mod.rs` 的重导出**必须是 `pub use map::*;`**,不能逐名列 12 个函数。`#[tauri::command]` 在每个函数旁边还生成了两个隐藏项(`__cmd__xxx` 与 `__tauri_command_name_xxx`),`generate_handler!` 展开后引用的是它们;逐名导出带不走隐藏项,编译报 24 个 `could not find __cmd__xxx in commands`,而错误信息里只字不提宏生成这回事。
+  - 这样 `lib.rs` 的 `generate_handler!` 列表才不用改 —— 那份清单的每一行都是前端 `invoke` 的字符串契约,改它等于改契约。
   - 判据:`pnpm verify` 全绿;`pnpm dev:app` 起来后规划一次路线、看一次生活圈。这是纯搬移,单独一个提交,不掺功能代码。
 
 ### M1 配置层
