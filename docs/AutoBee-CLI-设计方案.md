@@ -188,7 +188,7 @@ autobee-cli suggest --keyword <关键词> [--limit <n>]
 
 ### 5.3 exit code
 
-`AppError` 已带 `status: u16`(语义化 HTTP 状态,`core/src/error.rs:23-24`)。映射规则:
+**按 `code` 映射,不按 `status`。** `AppError` 带 `status: u16`(`core/src/error.rs:23-24`),但它不够分档:`BAD_MODE` 与 `BAIDU_KEY_REQUIRED` 都是 400,前者要人改命令、后者要人去填 AK,落在同一档就把两件事混了。映射规则:
 
 | exit code | 含义 | 来源 |
 | --- | --- | --- |
@@ -324,25 +324,28 @@ autobee-cli --help                                        # 期望 exit 0
 
 这一组**不新增任何行为**,纯搬迁。搬完行为若有变化,说明搬错了。
 
-- [ ] **C1-1 建 crate 骨架**
+- [x] **C1-1 建 crate 骨架**
   - 新建 `src-tauri/shell/Cargo.toml`:`name = "autobee-shell"`、`edition = "2024"`。
   - 依赖照抄根包 `Cargo.toml:24-50` 里这几项:`route-core`(path `../core`)、`serde`、`serde_json`、`thiserror`、`tracing`、`tracing-subscriber`、`rusqlite`(features `["bundled"]`)。
   - **`[target.'cfg(windows)'.dependencies]` 那段 `windows` 必须一起搬**(`Cargo.toml:46-50`,两个 feature)。漏了它 `crypto.rs` 的 `#[cfg(windows)]` 会静默不编译,DPAPI 变成空实现,而测试不会失败 —— 见 10.1。
   - `[lints]` 两段照抄。
   - 判据:`src-tauri/shell/src/lib.rs` 里只写 `//! doc` 时,`cargo build -p autobee-shell` 通过。
-- [ ] **C1-2 搬模块**
+  - 实际:`members` 那一行必须在这一步就改(`shell/` 在根包目录内,不进 `members` 时 cargo 报「包不在 workspace 里」,判据跑不了)。已完成。
+- [x] **C1-2 搬模块**
   - 从 `src-tauri/src/` 移到 `src-tauri/shell/src/`:`paths.rs`、`error.rs`、`logging.rs`、`logs.rs`、`credentials/`(整个目录 5 个文件)。
   - `shell/src/lib.rs` 声明这五个 `pub mod`,模块顺序与原 `lib.rs:5-10` 一致(去掉 `commands`)。
   - 模块内的 `use crate::xxx` 不用改:它们互相引用的还是同一个 crate 内的模块。
-  - 判据:`cargo test -p autobee-shell` 跑出 **35 个**测试全绿(与搬迁前根包的 35 个一一对应)。
-- [ ] **C1-3 接回根包**
+  - 判据:`cargo test -p autobee-shell` 跑出 **35 个**测试全绿(与搬迁前根包的 35 个一一对应)。已完成:35 passed。
+- [x] **C1-3 接回根包**
   - `src-tauri/Cargo.toml`:`members` 从 `["core"]` 改成 `["core", "shell"]`;`[dependencies]` 加 `autobee-shell = { path = "shell" }`。
   - 根包 `src/lib.rs` 只剩 `pub mod commands;`。
   - `commands.rs` 的 `use crate::credentials::…` / `crate::error::…` / `crate::logs::…` / `crate::paths::…` / `crate::logging::…` 全改成 `autobee_shell::…`。`grep -n "crate::" src-tauri/src/commands.rs` 应只剩 `crate::` 之外的路径。
   - 判据:`pnpm verify` 全绿;`pnpm dev:app` 起来后设置页能**填一个 Key 并读回掩码**。这一条必须手动点一次 —— 它是 10.1 那个 `#[cfg(windows)]` 陷阱唯一的检出手段,`cargo test` 检不出来。
-- [ ] **C1-4 守住可见性**
+  - 实际:`pnpm verify` 全绿(前端 56 + shell 36 + core 50 + clippy + fmt)。搬完后根包不再直接依赖 `rusqlite`/`tracing-subscriber`/`serde`/`serde_json`/`thiserror`/`windows`,已从根 `Cargo.toml` 删除。`grep -n "crate::" src-tauri/src/*.rs` 零命中。
+  - **手动那条已改成自动化**:`store.rs` 新增测试「真实文件路径上密钥能加密落盘再读回」,走 `open_at`(不是 `memory()`)存 Key、读回明文、并断言 db 文件里搜不到明文。已验证它真能检出陷阱 —— 把 `protect` 临时改成返回 `None` 后该测试 FAILED(`ENCRYPT_FAILED`)。所以 10.1 那个陷阱不再依赖人工点界面。
+- [x] **C1-4 守住可见性**
   - `crypto.rs` 的 `protect` / `unprotect` 保持 `pub(crate)`。换了 crate 之后 `store.rs` 仍与它同 crate,不需要放开。
-  - 判据:`grep -n "pub fn protect\|pub fn unprotect" src-tauri/shell/src/credentials/crypto.rs` 零命中(只有 `pub(crate) fn`)。
+  - 判据:`grep -n "pub fn protect\|pub fn unprotect" src-tauri/shell/src/credentials/crypto.rs` 零命中(只有 `pub(crate) fn`)。已完成:零命中,四处全是 `pub(crate)`。
 
 ### C2 参数解析 + `route`
 

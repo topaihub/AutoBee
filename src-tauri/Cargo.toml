@@ -2,7 +2,9 @@
 # core 独立成 crate 的理由：它不依赖 Tauri，`cargo test -p route-core` 能在
 # 几十秒内跑完，而带上 tauri 的一次完整编译要十几分钟。算路、坐标系、解码这些
 # 逻辑的回归主要靠单测，不该被 GUI 依赖的编译时间拖住。
-members = ["core"]
+# shell 拆出来的理由不同：它是 GUI 与 CLI 的公共底座（凭据、日志、路径），
+# 两个 bin 都要用。留在根包里的话 CLI 就得依赖 tauri 才能读到密钥。
+members = ["core", "shell"]
 resolver = "2"
 
 [package]
@@ -24,30 +26,20 @@ tauri-build = { version = "2.6.3", features = [] }
 [dependencies]
 route-core = { path = "core" }
 
+# 凭据、日志、路径。根包只剩 command 层，这些都在 shell 里。
+autobee-shell = { path = "shell" }
+
 # 插件版本写精确值而不是 "2"。原因同 ai-installer：Rust crate 与 npm 包是两半，
 # `tauri build` 会校验两边的 major/minor，写 "2" 时两边会各自漂开。
 tauri = { version = "2.11.5", features = [] }
 
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["chrono", "env-filter"] }
 
 # 瓦片以 base64 下发：IPC 的 JSON  serializer 会把 Vec<u8> 变成数字数组
 # （3 KB 的图会膨胀成十几 KB 的文本），而 base64 只多三分之一。
 base64 = "0.22"
 
-# 地图服务商档案（对标 ai-installer 的 settings/）。
-# bundled 把 SQLite 的 C 源码一起编进 exe，不依赖系统 DLL。
-rusqlite = { version = "0.40", features = ["bundled"] }
 tauri-plugin-opener = "^2"
-
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = [
-  "Win32_Foundation",             # HLOCAL / LocalFree
-  "Win32_Security_Cryptography",  # CryptProtectData / CryptUnprotectData（密钥落盘）
-] }
 
 [lints.clippy]
 # 桌面工具跑在别人机器上，panic 等于闪退无日志。测试代码在模块里单独 allow。

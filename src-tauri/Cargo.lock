@@ -211,14 +211,23 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 name = "autobee"
 version = "0.1.0"
 dependencies = [
+ "autobee-shell",
  "base64 0.22.1",
+ "route-core",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tracing",
+]
+
+[[package]]
+name = "autobee-shell"
+version = "0.1.0"
+dependencies = [
  "route-core",
  "rusqlite",
  "serde",
  "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
  "thiserror 2.0.20",
  "tracing",
  "tracing-subscriber",

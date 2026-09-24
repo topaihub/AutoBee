@@ -3,15 +3,10 @@
 //! 业务逻辑一行也不在这里 —— 它在 `route-core`，被 command 调。
 
 pub mod commands;
-pub mod credentials;
-pub mod error;
-pub mod logging;
-pub mod logs;
-pub mod paths;
 
 /// 启动应用。
 pub fn run() {
-    logging::init();
+    autobee_shell::logging::init();
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "AutoBee 启动");
 
     if let Err(error) = tauri::Builder::default()

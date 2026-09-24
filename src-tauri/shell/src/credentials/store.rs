@@ -466,4 +466,44 @@ mod tests {
         let amap = list.iter().find(|p| p.slug == "amap").unwrap();
         assert!(amap.implemented, "高德已实现");
     }
+
+    /// 走真实文件路径存取一次密钥。
+    ///
+    /// 其余测试用的是 `memory()`,它与 `open_at` 是两条独立路径。而这条要防的
+    /// 是 DPAPI 退化成空实现(`crypto.rs` 那两个 `#[cfg(not(windows))]` 的桩):
+    /// 那时 `secret_of` 返回 `None`、界面上只看到密钥框空了,而 `memory()`
+    /// 的测试照样全绿。顺带断言落盘无明文。
+    #[cfg(windows)]
+    #[test]
+    fn 真实文件路径上密钥能加密落盘再读回() {
+        let path = std::env::temp_dir()
+            .join(format!("autobee-store-test-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let store = Store::open_at(&path).unwrap();
+
+        let plain = "FAKEtest1234567890TEST";
+        store
+            .save(&MapProviderInput {
+                slug: "tencent".into(),
+                name: "腾讯位置服务".into(),
+                enabled: true,
+                priority: None,
+                api_key: Some(plain.into()),
+            })
+            .unwrap();
+
+        assert_eq!(
+            store.secret_of("tencent").unwrap().as_deref(),
+            Some(plain),
+            "读回的明文必须与存进去的一致 —— 不一致说明 DPAPI 没在工作"
+        );
+
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(
+            !bytes.windows(plain.len()).any(|w| w == plain.as_bytes()),
+            "db 文件里搜到了明文 Key"
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
 }

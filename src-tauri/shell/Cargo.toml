@@ -1,0 +1,42 @@
+[package]
+# 桌面外壳层：密钥存储、日志、路径。与 Tauri 无关，所以 GUI 与 CLI 两个
+# 入口都能依赖它 —— 这是把它从根包拆出来的唯一理由。
+name = "autobee-shell"
+version = "0.1.0"
+description = "AutoBee 外壳层（凭据、日志、路径），不依赖 Tauri"
+authors = ["AutoBee"]
+edition = "2024"
+
+[dependencies]
+route-core = { path = "../core" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["chrono", "env-filter"] }
+
+# bundled 把 SQLite 的 C 源码一起编进 exe，不依赖系统 DLL。
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+[target.'cfg(windows)'.dependencies]
+# crypto.rs 的 DPAPI 走这两个 feature。少一个的话 `#[cfg(windows)]` 那半
+# 会静默不编译、密钥变明文落盘，而测试全绿 —— 所以不许按需精简。
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",             # HLOCAL / LocalFree
+  "Win32_Security_Cryptography",  # CryptProtectData / CryptUnprotectData（密钥落盘）
+] }
+
+[lints.clippy]
+# 与根包同一套。桌面工具跑在别人机器上，panic 等于闪退无日志。
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+undocumented_unsafe_blocks = "deny"
+missing_errors_doc = "warn"
+
+[lints.rust]
+unsafe_code = "warn"
+missing_docs = "warn"
