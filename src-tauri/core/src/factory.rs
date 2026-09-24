@@ -8,6 +8,7 @@ use crate::error::AppError;
 use crate::models::ProviderId;
 use crate::providers::RouteProvider;
 use crate::providers::amap::AmapProvider;
+use crate::providers::baidu::BaiduProvider;
 use crate::providers::tencent::TencentProvider;
 
 /// 这家的 adapter 是否已经实现。
@@ -16,7 +17,10 @@ use crate::providers::tencent::TencentProvider;
 /// 而界面上没有任何解释（它只是静默地不参与候选）。
 #[must_use]
 pub fn is_implemented(id: ProviderId) -> bool {
-    matches!(id, ProviderId::Tencent | ProviderId::Amap)
+    matches!(
+        id,
+        ProviderId::Tencent | ProviderId::Amap | ProviderId::Baidu
+    )
 }
 
 /// 造一个 adapter。
@@ -35,7 +39,8 @@ pub fn create_provider(
     match id {
         ProviderId::Tencent => Ok(Box::new(TencentProvider::new(key))),
         ProviderId::Amap => Ok(Box::new(AmapProvider::new(key))),
-        // baidu / tianditu / here / google 陆续接入
+        ProviderId::Baidu => Ok(Box::new(BaiduProvider::new(key))),
+        // tianditu / here / google 陆续接入
         other => Err(AppError::not_implemented(other.as_str())),
     }
 }

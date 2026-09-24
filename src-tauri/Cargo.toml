@@ -4,7 +4,8 @@
 # 逻辑的回归主要靠单测，不该被 GUI 依赖的编译时间拖住。
 # shell 拆出来的理由不同：它是 GUI 与 CLI 的公共底座（凭据、日志、路径），
 # 两个 bin 都要用。留在根包里的话 CLI 就得依赖 tauri 才能读到密钥。
-members = ["core", "shell"]
+# cli 是第三个 crate 而不是根包的第二个 bin:bin 会继承根包的 tauri 依赖。
+members = ["core", "shell", "cli"]
 resolver = "2"
 
 [package]

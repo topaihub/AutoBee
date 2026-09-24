@@ -149,6 +149,10 @@ export type Settings = {
   tileSource: string;
   defaultProviders: ProviderId[];
   showLogs: boolean;
+  /** 「含较长步行」提醒阈值，米。见 §4.2:阈值不许写死在 UI。 */
+  longWalkMeters: number;
+  /** 「换乘较多」提醒阈值，次。 */
+  manyTransfers: number;
 };
 
 export type LogLevel = "ERROR" | "WARN" | "INFO" | "DEBUG" | "TRACE";

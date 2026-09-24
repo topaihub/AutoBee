@@ -5,7 +5,8 @@
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     %sveltekit.head%
-    <script charset="utf-8" src="https://map.qq.com/api/gljs?v=1.exp&key=FAKE-KEY-FOR-TEST"></script>
+    <!-- 地图 SDK 不在这里写死：AK 存在加密档案库里，由 MapCanvas 取到之后再注入。
+         写在这里等于把明文 AK 提交进仓库，且换厂商要改 HTML。 -->
   </head>
   <body data-sveltekit-preload-data="hover" class="bg-background text-foreground">
     <div style="display: contents">%sveltekit.body%</div>

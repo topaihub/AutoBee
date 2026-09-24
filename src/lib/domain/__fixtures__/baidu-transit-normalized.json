@@ -1,0 +1,305 @@
+[
+  {
+    "id": "r0",
+    "distance": 12520,
+    "duration": 68,
+    "price": 4.0,
+    "bounds": [
+      {
+        "lat": 39.913230766846,
+        "lng": 116.32807521606
+      },
+      {
+        "lat": 39.939368029426,
+        "lng": 116.40790762673
+      }
+    ],
+    "segments": [
+      {
+        "kind": "walk",
+        "distance": 1345,
+        "duration": 20,
+        "points": [],
+        "instruction": [
+          "步行1.3公里"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 6618,
+        "duration": 14,
+        "points": [],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁1号线八通线",
+          "stationCount": 6,
+          "color": "#5b6ee1",
+          "getOn": {
+            "title": "天安门东站(B东北口)",
+            "location": {
+              "lat": 39.914081648492,
+              "lng": 116.40790762673
+            }
+          },
+          "getOff": {
+            "title": "军事博物馆站",
+            "location": {
+              "lat": 39.913237684626,
+              "lng": 116.33033894595
+            }
+          },
+          "firstTime": "05:12",
+          "lastTime": "23:48"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 404,
+        "duration": 6,
+        "points": [],
+        "instruction": [
+          "站内通道换乘 步行404米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 2893,
+        "duration": 6,
+        "points": [],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁9号线",
+          "stationCount": 2,
+          "color": "#e8543f",
+          "getOn": {
+            "title": "军事博物馆站",
+            "location": {
+              "lat": 39.913452135454,
+              "lng": 116.32807521606
+            }
+          },
+          "getOff": {
+            "title": "白石桥南站",
+            "location": {
+              "lat": 39.93894620588,
+              "lng": 116.33225233668
+            }
+          },
+          "firstTime": "05:23",
+          "lastTime": "23:03"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 1260,
+        "duration": 18,
+        "points": [],
+        "instruction": [
+          "步行1.3公里"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "r1",
+    "distance": 12681,
+    "duration": 71,
+    "price": 4.0,
+    "bounds": [
+      {
+        "lat": 39.913120082271,
+        "lng": 116.3300874204
+      },
+      {
+        "lat": 39.947644921774,
+        "lng": 116.40790762673
+      }
+    ],
+    "segments": [
+      {
+        "kind": "walk",
+        "distance": 1345,
+        "duration": 20,
+        "points": [],
+        "instruction": [
+          "步行1.3公里"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 5445,
+        "duration": 12,
+        "points": [],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁1号线八通线",
+          "stationCount": 5,
+          "color": "#5b6ee1",
+          "getOn": {
+            "title": "天安门东站(B东北口)",
+            "location": {
+              "lat": 39.914081648492,
+              "lng": 116.40790762673
+            }
+          },
+          "getOff": {
+            "title": "木樨地站",
+            "location": {
+              "lat": 39.913120082271,
+              "lng": 116.34409200331
+            }
+          },
+          "firstTime": "05:12",
+          "lastTime": "23:48"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 692,
+        "duration": 10,
+        "points": [],
+        "instruction": [
+          "站外换乘 步行692米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 4129,
+        "duration": 10,
+        "points": [],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁16号线",
+          "stationCount": 4,
+          "color": "#e8543f",
+          "getOn": {
+            "title": "木樨地站(F口)",
+            "location": {
+              "lat": 39.914794167202,
+              "lng": 116.34069640848
+            }
+          },
+          "getOff": {
+            "title": "国家图书馆站",
+            "location": {
+              "lat": 39.947644921774,
+              "lng": 116.33089589536
+            }
+          },
+          "firstTime": "05:30",
+          "lastTime": "23:09"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 1070,
+        "duration": 16,
+        "points": [],
+        "instruction": [
+          "步行1.1公里"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "r2",
+    "distance": 13513,
+    "duration": 72,
+    "price": 4.0,
+    "bounds": [
+      {
+        "lat": 39.913306862386,
+        "lng": 116.33178521782
+      },
+      {
+        "lat": 39.949304327594,
+        "lng": 116.40790762673
+      }
+    ],
+    "segments": [
+      {
+        "kind": "walk",
+        "distance": 1345,
+        "duration": 20,
+        "points": [],
+        "instruction": [
+          "步行1.3公里"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 2106,
+        "duration": 5,
+        "points": [],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁1号线八通线",
+          "stationCount": 2,
+          "color": "#5b6ee1",
+          "getOn": {
+            "title": "天安门东站(B东北口)",
+            "location": {
+              "lat": 39.914081648492,
+              "lng": 116.40790762673
+            }
+          },
+          "getOff": {
+            "title": "西单站",
+            "location": {
+              "lat": 39.91334145124,
+              "lng": 116.38323117438
+            }
+          },
+          "firstTime": "05:12",
+          "lastTime": "23:48"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 457,
+        "duration": 7,
+        "points": [],
+        "instruction": [
+          "站内通道换乘 步行457米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 8192,
+        "duration": 16,
+        "points": [],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁4号线大兴线",
+          "stationCount": 7,
+          "color": "#e8543f",
+          "getOn": {
+            "title": "西单站",
+            "location": {
+              "lat": 39.913306862386,
+              "lng": 116.38057219007
+            }
+          },
+          "getOff": {
+            "title": "国家图书馆站",
+            "location": {
+              "lat": 39.949304327594,
+              "lng": 116.33181216698
+            }
+          },
+          "firstTime": "05:18",
+          "lastTime": "23:33"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 1413,
+        "duration": 20,
+        "points": [],
+        "instruction": [
+          "步行1.4公里"
+        ]
+      }
+    ]
+  }
+]

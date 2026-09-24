@@ -67,6 +67,12 @@ impl Crs {
             _ => None,
         }
     }
+
+    /// 全部合法值,与 [`Self::parse`] 认的一一对应。
+    ///
+    /// 给界面、CLI 的 `--help`、报错信息拼可选值用。不许在别处再抄一份:
+    /// 抄的那份不会随这里一起改,于是报错里列的值与真正认的值会漂开。
+    pub const ALL: [&'static str; 4] = ["WGS84", "GCJ02", "BD09", "CGCS2000"];
 }
 
 /// 地图服务商。
@@ -339,16 +345,23 @@ pub enum LifeCirclePackage {
 }
 
 impl LifeCirclePackage {
-    /// 解析前端字符串。
+    /// 解析前端或命令行给出的字符串。认不出返回 `None`。
+    ///
+    /// trim + 忽略大小写,与 [`TravelMode::parse`] / [`SortBy::parse`] /
+    /// [`Crs::parse`] 一致。命令行上 `--package Care` 与 `--package care`
+    /// 不该一个通一个不通。
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
-        match text {
+        match text.trim().to_ascii_lowercase().as_str() {
             "care" => Some(Self::Care),
             "family" => Some(Self::Family),
             "emergency" => Some(Self::Emergency),
             _ => None,
         }
     }
+
+    /// 全部合法值,与 [`Self::parse`] 认的一一对应。理由同 [`Crs::ALL`]。
+    pub const ALL: [&'static str; 3] = ["care", "family", "emergency"];
 }
 
 /// 生活圈内一个经真实步行路线验证的 POI。
@@ -488,5 +501,36 @@ mod tests {
             assert!(TravelMode::ALL.contains(&text));
         }
         assert_eq!(SortBy::parse(" Distance "), Some(SortBy::Distance));
+    }
+
+    /// 四个 `ALL` 是界面、CLI `--help`、报错信息拼可选值的唯一来源。
+    /// 它与 `parse` 漂开的现象是:报错说「可选:a / b」,而填 b 被拒。
+    #[test]
+    fn 四个枚举的_all_与_parse_一一对应() {
+        for text in TravelMode::ALL {
+            assert!(
+                TravelMode::parse(text).is_some(),
+                "TravelMode 认不出 {text}"
+            );
+        }
+        for text in SortBy::ALL {
+            assert!(SortBy::parse(text).is_some(), "SortBy 认不出 {text}");
+        }
+        for text in Crs::ALL {
+            assert!(Crs::parse(text).is_some(), "Crs 认不出 {text}");
+        }
+        for text in LifeCirclePackage::ALL {
+            assert!(
+                LifeCirclePackage::parse(text).is_some(),
+                "LifeCirclePackage 认不出 {text}"
+            );
+        }
+
+        // 反向:大小写与空白不该改变结果(四个 parse 都 trim + 归一化)。
+        assert_eq!(Crs::parse(" gcj02 "), Crs::parse("GCJ02"));
+        assert_eq!(
+            LifeCirclePackage::parse(" Care "),
+            LifeCirclePackage::parse("care")
+        );
     }
 }

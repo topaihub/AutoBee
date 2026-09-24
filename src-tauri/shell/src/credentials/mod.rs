@@ -73,6 +73,12 @@ pub struct MapProviderInput {
     pub api_key: Option<String>,
 }
 
+/// 「含较长步行」的默认阈值，米。§4.2 取的保守值。
+pub const DEFAULT_LONG_WALK_METERS: u32 = 500;
+
+/// 「换乘较多」的默认阈值，次。
+pub const DEFAULT_MANY_TRANSFERS: u32 = 2;
+
 /// 界面偏好。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -92,6 +98,14 @@ pub struct SettingsDto {
     /// 只影响界面，不进 [`route_core::config::Settings`] —— 那个结构体是喂给
     /// 算路的，掺进一个界面开关会让「改了显示偏好」看起来像「改了算路配置」。
     pub show_logs: bool,
+    /// 「含较长步行」提醒的阈值，米。
+    ///
+    /// 与 `show_logs` 同理只影响界面：它决定标签显不显示，不参与算路与评分，
+    /// 所以不进 [`route_core::config::Settings`]。§4.2 末尾要求它可配置、
+    /// 不许写死在 UI 里。
+    pub long_walk_meters: u32,
+    /// 「换乘较多」提醒的阈值，次。超过这个数才提醒。
+    pub many_transfers: u32,
 }
 
 /// 一次 Key 可用性测试的结果。

@@ -15,7 +15,10 @@ pub struct Store {
 }
 
 impl Store {
-    /// 打开默认位置的库（`%LOCALAPPDATA%\AutoBee\settings.db`）。
+    /// 打开默认位置的库（`<exe 目录>\data\settings.db`，见 [`crate::paths::data_dir`]）。
+    ///
+    /// 这里**不是** `%LOCALAPPDATA%` 或 `%APPDATA%\<identifier>\`：便携版要求复制
+    /// 整个目录就能迁移，数据必须跟着 exe 走。
     ///
     /// # Errors
     ///
@@ -476,8 +479,8 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn 真实文件路径上密钥能加密落盘再读回() {
-        let path = std::env::temp_dir()
-            .join(format!("autobee-store-test-{}.db", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("autobee-store-test-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let store = Store::open_at(&path).unwrap();
 

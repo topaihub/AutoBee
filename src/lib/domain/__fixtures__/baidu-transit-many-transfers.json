@@ -1,0 +1,788 @@
+[
+  {
+    "id": "r0",
+    "distance": 46948,
+    "duration": 133,
+    "price": 7,
+    "bounds": [
+      {
+        "lat": 39.789345141406,
+        "lng": 116.33916030606
+      },
+      {
+        "lat": 40.076770370757,
+        "lng": 116.5203125952
+      }
+    ],
+    "segments": [
+      {
+        "kind": "walk",
+        "distance": 1330,
+        "duration": 19,
+        "points": [
+          {
+            "lat": 40.069993147796,
+            "lng": 116.33998674712
+          }
+        ],
+        "instruction": [
+          "步行1.3公里"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 6871,
+        "duration": 8,
+        "points": [
+          {
+            "lat": 40.076418413591,
+            "lng": 116.34266369754
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁13号线",
+          "stationCount": 2,
+          "color": "#5b6ee1",
+          "getOn": {
+            "title": "回龙观站(A1北口)",
+            "location": {
+              "lat": 40.076418413591,
+              "lng": 116.34266369754
+            }
+          },
+          "getOff": {
+            "title": "立水桥站",
+            "location": {
+              "lat": 40.059177169357,
+              "lng": 116.41774407207
+            }
+          },
+          "firstTime": "06:02",
+          "lastTime": "23:09"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 270,
+        "duration": 4,
+        "points": [
+          {
+            "lat": 40.059170266457,
+            "lng": 116.41773508901
+          }
+        ],
+        "instruction": [
+          "站厅换乘 步行270米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 23866,
+        "duration": 44,
+        "points": [
+          {
+            "lat": 40.059308324325,
+            "lng": 116.41878610646
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁5号线",
+          "stationCount": 19,
+          "color": "#e8543f",
+          "getOn": {
+            "title": "立水桥站",
+            "location": {
+              "lat": 40.059308324325,
+              "lng": 116.41878610646
+            }
+          },
+          "getOff": {
+            "title": "宋家庄站",
+            "location": {
+              "lat": 39.85191159414,
+              "lng": 116.43491069036
+            }
+          },
+          "firstTime": "05:06",
+          "lastTime": "22:54"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 146,
+        "duration": 3,
+        "points": [
+          {
+            "lat": 39.85190467012,
+            "lng": 116.43490170731
+          }
+        ],
+        "instruction": [
+          "同台换乘 步行146米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 12391,
+        "duration": 19,
+        "points": [
+          {
+            "lat": 39.851316125897,
+            "lng": 116.43489272425
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁亦庄线",
+          "stationCount": 7,
+          "color": "#2ba471",
+          "getOn": {
+            "title": "宋家庄站",
+            "location": {
+              "lat": 39.851316125897,
+              "lng": 116.43489272425
+            }
+          },
+          "getOff": {
+            "title": "荣京东街站",
+            "location": {
+              "lat": 39.799566681367,
+              "lng": 116.51977361189
+            }
+          },
+          "firstTime": "05:59",
+          "lastTime": "23:19"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 2074,
+        "duration": 30,
+        "points": [
+          {
+            "lat": 39.799559752028,
+            "lng": 116.51977361189
+          }
+        ],
+        "instruction": [
+          "步行2.1公里"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "r1",
+    "distance": 47353,
+    "duration": 140,
+    "price": 27,
+    "bounds": [
+      {
+        "lat": 39.787778858313,
+        "lng": 116.33916030606
+      },
+      {
+        "lat": 40.076770370757,
+        "lng": 116.51841717057
+      }
+    ],
+    "segments": [
+      {
+        "kind": "walk",
+        "distance": 1330,
+        "duration": 19,
+        "points": [
+          {
+            "lat": 40.069993147796,
+            "lng": 116.33998674712
+          }
+        ],
+        "instruction": [
+          "步行1.3公里"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 6871,
+        "duration": 8,
+        "points": [
+          {
+            "lat": 40.076418413591,
+            "lng": 116.34266369754
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁13号线",
+          "stationCount": 2,
+          "color": "#5b6ee1",
+          "getOn": {
+            "title": "回龙观站(A1北口)",
+            "location": {
+              "lat": 40.076418413591,
+              "lng": 116.34266369754
+            }
+          },
+          "getOff": {
+            "title": "立水桥站",
+            "location": {
+              "lat": 40.059177169357,
+              "lng": 116.41774407207
+            }
+          },
+          "firstTime": "06:02",
+          "lastTime": "23:09"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 270,
+        "duration": 4,
+        "points": [
+          {
+            "lat": 40.059170266457,
+            "lng": 116.41773508901
+          }
+        ],
+        "instruction": [
+          "站厅换乘 步行270米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 23866,
+        "duration": 44,
+        "points": [
+          {
+            "lat": 40.059308324325,
+            "lng": 116.41878610646
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁5号线",
+          "stationCount": 19,
+          "color": "#e8543f",
+          "getOn": {
+            "title": "立水桥站",
+            "location": {
+              "lat": 40.059308324325,
+              "lng": 116.41878610646
+            }
+          },
+          "getOff": {
+            "title": "宋家庄站",
+            "location": {
+              "lat": 39.85191159414,
+              "lng": 116.43491069036
+            }
+          },
+          "firstTime": "05:06",
+          "lastTime": "22:54"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 146,
+        "duration": 3,
+        "points": [
+          {
+            "lat": 39.85190467012,
+            "lng": 116.43490170731
+          }
+        ],
+        "instruction": [
+          "同台换乘 步行146米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 8594,
+        "duration": 12,
+        "points": [
+          {
+            "lat": 39.851316125897,
+            "lng": 116.43489272425
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁亦庄线",
+          "stationCount": 4,
+          "color": "#2ba471",
+          "getOn": {
+            "title": "宋家庄站",
+            "location": {
+              "lat": 39.851316125897,
+              "lng": 116.43489272425
+            }
+          },
+          "getOff": {
+            "title": "亦庄桥站",
+            "location": {
+              "lat": 39.808865219929,
+              "lng": 116.48685969801
+            }
+          },
+          "firstTime": "05:59",
+          "lastTime": "23:19"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 367,
+        "duration": 6,
+        "points": [
+          {
+            "lat": 39.808858291534,
+            "lng": 116.48685969801
+          }
+        ],
+        "instruction": [
+          "步行367米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 5145,
+        "duration": 18,
+        "points": [
+          {
+            "lat": 39.809100784919,
+            "lng": 116.4848205445
+          }
+        ],
+        "line": {
+          "vehicle": "BUS",
+          "title": "快速直达专线188路",
+          "stationCount": 3,
+          "color": "#2ba471",
+          "getOn": {
+            "title": "地铁亦庄桥站",
+            "location": {
+              "lat": 39.809100784919,
+              "lng": 116.4848205445
+            }
+          },
+          "getOff": {
+            "title": "中芯国际站",
+            "location": {
+              "lat": 39.789192672949,
+              "lng": 116.51293750696
+            }
+          },
+          "firstTime": "16:00",
+          "lastTime": "16:00"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 764,
+        "duration": 11,
+        "points": [
+          {
+            "lat": 39.789213464123,
+            "lng": 116.51287462558
+          }
+        ],
+        "instruction": [
+          "步行764米"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "r2",
+    "distance": 58747,
+    "duration": 142,
+    "price": 27,
+    "bounds": [
+      {
+        "lat": 39.776800006919,
+        "lng": 116.33916030606
+      },
+      {
+        "lat": 40.076770370757,
+        "lng": 116.59802500487
+      }
+    ],
+    "segments": [
+      {
+        "kind": "walk",
+        "distance": 1330,
+        "duration": 19,
+        "points": [
+          {
+            "lat": 40.069993147796,
+            "lng": 116.33998674712
+          }
+        ],
+        "instruction": [
+          "步行1.3公里"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 15878,
+        "duration": 19,
+        "points": [
+          {
+            "lat": 40.076418413591,
+            "lng": 116.34266369754
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁13号线",
+          "stationCount": 4,
+          "color": "#5b6ee1",
+          "getOn": {
+            "title": "回龙观站(A1北口)",
+            "location": {
+              "lat": 40.076418413591,
+              "lng": 116.34266369754
+            }
+          },
+          "getOff": {
+            "title": "望京西站",
+            "location": {
+              "lat": 40.000787960734,
+              "lng": 116.45402663162
+            }
+          },
+          "firstTime": "06:02",
+          "lastTime": "23:09"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 298,
+        "duration": 5,
+        "points": [
+          {
+            "lat": 40.000787960734,
+            "lng": 116.45401764856
+          }
+        ],
+        "instruction": [
+          "站内通道换乘 步行298米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 30244,
+        "duration": 45,
+        "points": [
+          {
+            "lat": 40.000214523063,
+            "lng": 116.45478120824
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁17号线",
+          "stationCount": 13,
+          "color": "#e8543f",
+          "getOn": {
+            "title": "望京西站",
+            "location": {
+              "lat": 40.000214523063,
+              "lng": 116.45478120824
+            }
+          },
+          "getOff": {
+            "title": "次渠站",
+            "location": {
+              "lat": 39.809218567108,
+              "lng": 116.59802500487
+            }
+          },
+          "firstTime": "05:26",
+          "lastTime": "22:48"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 270,
+        "duration": 4,
+        "points": [
+          {
+            "lat": 39.80921163875,
+            "lng": 116.59801602181
+          }
+        ],
+        "instruction": [
+          "站厅换乘 步行270米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 7932,
+        "duration": 12,
+        "points": [
+          {
+            "lat": 39.80919085367,
+            "lng": 116.59790822515
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁亦庄线",
+          "stationCount": 4,
+          "color": "#2ba471",
+          "getOn": {
+            "title": "次渠站",
+            "location": {
+              "lat": 39.80919085367,
+              "lng": 116.59790822515
+            }
+          },
+          "getOff": {
+            "title": "荣昌东街站",
+            "location": {
+              "lat": 39.789206533732,
+              "lng": 116.52817276841
+            }
+          },
+          "firstTime": "05:21",
+          "lastTime": "22:41"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 164,
+        "duration": 3,
+        "points": [
+          {
+            "lat": 39.789206533732,
+            "lng": 116.52816378536
+          }
+        ],
+        "instruction": [
+          "步行164米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 1828,
+        "duration": 8,
+        "points": [
+          {
+            "lat": 39.788194689187,
+            "lng": 116.52830751424
+          }
+        ],
+        "line": {
+          "vehicle": "BUS",
+          "title": "快速直达专线188路",
+          "stationCount": 1,
+          "color": "#2ba471",
+          "getOn": {
+            "title": "地铁荣昌东街站",
+            "location": {
+              "lat": 39.788194689187,
+              "lng": 116.52830751424
+            }
+          },
+          "getOff": {
+            "title": "中芯国际站",
+            "location": {
+              "lat": 39.789365932533,
+              "lng": 116.51309920195
+            }
+          },
+          "firstTime": "17:15",
+          "lastTime": "17:15"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 803,
+        "duration": 12,
+        "points": [
+          {
+            "lat": 39.789352071782,
+            "lng": 116.51314411723
+          }
+        ],
+        "instruction": [
+          "步行803米"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "r3",
+    "distance": 47512,
+    "duration": 146,
+    "price": 7,
+    "bounds": [
+      {
+        "lat": 39.789345141406,
+        "lng": 116.33998674712
+      },
+      {
+        "lat": 40.069993147796,
+        "lng": 116.5203125952
+      }
+    ],
+    "segments": [
+      {
+        "kind": "walk",
+        "distance": 1739,
+        "duration": 25,
+        "points": [
+          {
+            "lat": 40.069993147796,
+            "lng": 116.33998674712
+          }
+        ],
+        "instruction": [
+          "步行1.7公里"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 28200,
+        "duration": 52,
+        "points": [
+          {
+            "lat": 40.066031401252,
+            "lng": 116.35376675365
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁8号线",
+          "stationCount": 22,
+          "color": "#5b6ee1",
+          "getOn": {
+            "title": "育新站(A西北口)",
+            "location": {
+              "lat": 40.066031401252,
+              "lng": 116.35376675365
+            }
+          },
+          "getOff": {
+            "title": "大红门站",
+            "location": {
+              "lat": 39.850319051135,
+              "lng": 116.40711711789
+            }
+          },
+          "firstTime": "04:44",
+          "lastTime": "22:54"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 351,
+        "duration": 5,
+        "points": [
+          {
+            "lat": 39.850319051135,
+            "lng": 116.40711711789
+          }
+        ],
+        "instruction": [
+          "站内通道换乘 步行351米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 2487,
+        "duration": 4,
+        "points": [
+          {
+            "lat": 39.85182850586,
+            "lng": 116.40577864268
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁10号线外环",
+          "stationCount": 2,
+          "color": "#e8543f",
+          "getOn": {
+            "title": "大红门站",
+            "location": {
+              "lat": 39.85182850586,
+              "lng": 116.40577864268
+            }
+          },
+          "getOff": {
+            "title": "宋家庄站",
+            "location": {
+              "lat": 39.85196698627,
+              "lng": 116.43491069036
+            }
+          },
+          "firstTime": "05:31",
+          "lastTime": "23:17"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 270,
+        "duration": 4,
+        "points": [
+          {
+            "lat": 39.85196698627,
+            "lng": 116.43490170731
+          }
+        ],
+        "instruction": [
+          "站厅换乘 步行270米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 12391,
+        "duration": 19,
+        "points": [
+          {
+            "lat": 39.851316125897,
+            "lng": 116.43489272425
+          }
+        ],
+        "line": {
+          "vehicle": "SUBWAY",
+          "title": "地铁亦庄线",
+          "stationCount": 7,
+          "color": "#2ba471",
+          "getOn": {
+            "title": "宋家庄站",
+            "location": {
+              "lat": 39.851316125897,
+              "lng": 116.43489272425
+            }
+          },
+          "getOff": {
+            "title": "荣京东街站",
+            "location": {
+              "lat": 39.799566681367,
+              "lng": 116.51977361189
+            }
+          },
+          "firstTime": "05:59",
+          "lastTime": "23:19"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 2074,
+        "duration": 30,
+        "points": [
+          {
+            "lat": 39.799559752028,
+            "lng": 116.51977361189
+          }
+        ],
+        "instruction": [
+          "步行2.1公里"
+        ]
+      }
+    ]
+  }
+]

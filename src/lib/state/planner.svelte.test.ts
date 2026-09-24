@@ -43,6 +43,8 @@ function fakeClient(overrides: Partial<PlannerClient> = {}): PlannerClient {
       tileSource: "arcgis-street",
       defaultProviders: [],
       showLogs: false,
+      longWalkMeters: 500,
+      manyTransfers: 2,
     })),
     saveSettings: vi.fn(async (s) => s),
     readLogs: vi.fn(async () => []),

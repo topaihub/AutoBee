@@ -116,7 +116,7 @@ pub const PROVIDERS: &[ProviderMeta] = &[
             walking: true,
         },
         coord_sys: Crs::Bd09,
-        priority: 4,
+        priority: 0,
         key_apply_url: "https://lbsyun.baidu.com/apiconsole/key",
     },
     ProviderMeta {
@@ -248,7 +248,8 @@ mod tests {
         let config = config_with(&[ProviderId::Baidu, ProviderId::Tencent, ProviderId::Amap]);
         assert_eq!(
             resolve_providers(Some("CN"), TravelMode::Subway, &config),
-            vec![ProviderId::Tencent, ProviderId::Amap, ProviderId::Baidu]
+            // 百度 priority 0（大赛主链路），腾讯 1、高德 2。
+            vec![ProviderId::Baidu, ProviderId::Tencent, ProviderId::Amap]
         );
     }
 

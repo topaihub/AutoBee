@@ -1,0 +1,36 @@
+[package]
+# 命令行入口。存在的理由是跨边界复用:编码 agent、脚本、CI 拿不到 Tauri
+# 的 IPC,只能走 exe + stdout。见 CLI 设计方案 §1.2。
+name = "autobee-cli"
+version = "0.1.0"
+description = "AutoBee 命令行：算路、地点联想、15 分钟生活圈"
+authors = ["AutoBee"]
+edition = "2024"
+
+[dependencies]
+route-core = { path = "../core" }
+# 与图形界面同一份 settings.db、同一套 DPAPI 解密。CLI 不新增配置文件、
+# 不读环境变量里的 Key（§7.1）。
+autobee-shell = { path = "../shell" }
+
+# serde 只为 `report` 那个 `T: Serialize` 约束,真正的序列化走 serde_json。
+serde = "1"
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["chrono", "env-filter"] }
+
+# 不依赖 tauri。依赖它的话这个 crate 就编不成独立 exe 了（§3.1 约束一）。
+
+[lints.clippy]
+# 与根包同一套。
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+undocumented_unsafe_blocks = "deny"
+missing_errors_doc = "warn"
+
+[lints.rust]
+unsafe_code = "warn"
+missing_docs = "warn"

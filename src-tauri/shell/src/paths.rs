@@ -36,3 +36,46 @@ pub fn settings_db() -> PathBuf {
 pub fn log_file() -> PathBuf {
     data_dir().join("logs").join("autobee.log")
 }
+
+#[allow(clippy::unwrap_used, reason = "测试里断言失败即测试失败")]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 便携版的全部意义在这一条:数据跟着 exe 走,不进用户看不见的系统目录。
+    /// 一旦有人把它改回 `%APPDATA%\<identifier>\`,复制目录迁移就会悄悄丢档案库。
+    #[test]
+    fn 数据目录跟着_exe_而不是系统_appdata() {
+        let exe = std::env::current_exe().unwrap();
+        let exe_dir = exe.parent().unwrap();
+
+        assert_eq!(
+            data_dir(),
+            exe_dir.join("data"),
+            "数据根目录必须是 exe 同级的 data"
+        );
+        assert_eq!(settings_db(), exe_dir.join("data").join("settings.db"));
+        assert_eq!(
+            log_file(),
+            exe_dir.join("data").join("logs").join("autobee.log")
+        );
+        assert_eq!(tile_cache_dir(), exe_dir.join("data").join("tiles"));
+    }
+
+    /// 光比对拼接结果还不够:万一 `data_dir` 改成读环境变量,上面那条在
+    /// 恰好没设该变量的机器上仍会过。这里直接断言路径里不出现系统目录。
+    #[test]
+    fn 数据目录不落在_appdata_或_temp() {
+        let path = settings_db();
+        let text = path.to_string_lossy().to_ascii_lowercase();
+        for var in ["APPDATA", "LOCALAPPDATA", "USERPROFILE"] {
+            if let Ok(value) = std::env::var(var) {
+                let value = value.to_ascii_lowercase();
+                // 仓库自身就在用户目录下时 USERPROFILE 会是真前缀,那不算越界,
+                // 只在它形如 `<USERPROFILE>\AppData\...` 时才是落回了系统目录。
+                let escaped = text.starts_with(&value) && text.contains("\\appdata\\");
+                assert!(!escaped, "{var} 下的系统目录:{text}");
+            }
+        }
+    }
+}

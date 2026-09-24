@@ -131,18 +131,45 @@ if not exist "%SRC%\AutoBee.exe" (
   echo        %SRC%\AutoBee.exe 1>&2
   goto fail
 )
+
+rem The CLI is a separate crate, so `tauri build` does not build it. Without
+rem this step dist\ would ship only the GUI and the CLI smoke checks would be
+rem run against a stale debug exe.
+echo       Building the command-line tool...
+call "%ROOT%scripts\cargo-msvc.bat" build --release -p autobee-cli
+if errorlevel 1 (
+  echo ERROR: the CLI build failed. 1>&2
+  goto fail
+)
+if not exist "%SRC%\autobee-cli.exe" (
+  echo ERROR: CLI build reported success but the EXE is missing: 1>&2
+  echo        %SRC%\autobee-cli.exe 1>&2
+  goto fail
+)
 echo.
 
 rem ---------------------------------------------------------------------------
 rem [5/6] Collect into dist\
 rem ---------------------------------------------------------------------------
 echo [5/6] Collecting artifacts into dist\ ...
+rem Wipe the payload dir first. Runtime data lands next to the exe by design
+rem (see shell\src\paths.rs), so launching the packaged build here seeds
+rem %DIST%\data with a settings.db and logs. Compress-Archive packs whatever
+rem is in the folder, so without this the portable zip ships the local
+rem credential store and log file.
+rd /s /q "%DIST%" 2>nul
 if not exist "%DIST%" mkdir "%DIST%"
 if not exist "%INSTALLER%" mkdir "%INSTALLER%"
 
 copy /y "%SRC%\AutoBee.exe" "%DIST%\AutoBee.exe" >nul
 if errorlevel 1 (
   echo ERROR: failed to copy the EXE into %DIST%. 1>&2
+  goto fail
+)
+
+copy /y "%SRC%\autobee-cli.exe" "%DIST%\autobee-cli.exe" >nul
+if errorlevel 1 (
+  echo ERROR: failed to copy the CLI into %DIST%. 1>&2
   goto fail
 )
 

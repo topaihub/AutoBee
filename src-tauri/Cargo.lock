@@ -221,6 +221,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "autobee-cli"
+version = "0.1.0"
+dependencies = [
+ "autobee-shell",
+ "route-core",
+ "serde",
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "autobee-shell"
 version = "0.1.0"
 dependencies = [

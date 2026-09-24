@@ -275,19 +275,27 @@ pub async fn get_tile(z: u8, x: u32, y: u32) -> Result<String, AppError> {
     .map_err(|error| join_failed(&error.to_string()))?
 }
 
-/// 取腾讯地图 JS SDK 的 Key。仅供本地 WebView 加载腾讯矢量底图。
+/// 取百度 JS API GL 的 **AK 明文**,仅供本地 WebView 加载百度底图。
+///
+/// # 为什么这条 command 下发明文,而 `list_map_providers` 只给掩码
+///
+/// JS API GL 是浏览器内渲染,脚本 URL 里必须带明文 AK,没有代理掉的办法
+/// (脚本在百度的域,请求由浏览器直接发)。其余厂商都只在 Rust 侧调 HTTP,
+/// 明文不必离开进程 —— 那条掩码约定不变,`store.rs` 里有测试钉着。
+/// 泄露风险与取舍见 [`resolve::baidu_sdk_key`]。
+///
+/// 原先这里返回的是腾讯的 key(矢量底图),M1-4 把主地图换成百度 JS API GL
+/// 之后底图来自百度,继续下发腾讯 key 只会让前端加载一个用不上的 SDK。
 ///
 /// # Errors
 ///
-/// 档案库读不出来时返回错误。
+/// 档案库读不出来时返回错误。没填 AK 或用户停用了百度时返回 `Ok(None)` ——
+/// 前端据此显示「请先在设置里填百度 AK」而不是错误态。
 #[tauri::command]
 pub async fn get_map_sdk_key() -> Result<Option<String>, AppError> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let store = Store::open()?;
-        store.secret_of("tencent")
-    })
-    .await
-    .map_err(|error| join_failed(&error.to_string()))?
+    tauri::async_runtime::spawn_blocking(resolve::baidu_sdk_key)
+        .await
+        .map_err(|error| join_failed(&error.to_string()))?
 }
 
 /// 查询起点周围真实步行 15 分钟内的百度 POI 服务。

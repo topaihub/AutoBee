@@ -1,7 +1,7 @@
 <script lang="ts">
   /** 单个方案的摘要卡片 + 展开后的分段明细。 */
   import type { Route } from "$lib/ipc/types";
-  import { burdenReason, routeBurden, type TravelProfile } from "$lib/domain/accessibility";
+  import { DEFAULT_LABEL_THRESHOLDS, burdenReason, routeBurden, type DecisionLabel, type LabelThresholds, type TravelProfile } from "$lib/domain/accessibility";
   import { formatDistance, formatDuration, formatPrice } from "$lib/domain/format";
   import { hasBus, hasSubway, lineNames, totalWalkDistance } from "$lib/domain/route";
   import Badge from "$lib/components/ui/badge/Badge.svelte";
@@ -11,11 +11,20 @@
     profile,
     selected,
     onselect,
+    labels = [],
+    thresholds = DEFAULT_LABEL_THRESHOLDS,
   }: {
     route: Route;
     profile: TravelProfile;
     selected: boolean;
     onselect: () => void;
+    /**
+     * §4.2 的决策标签。由父级一次性对整组候选算好后传入 —— 「在候选中最低」
+     * 这类相对判断在单张卡片里看不到其他候选，算不出来。
+     */
+    labels?: DecisionLabel[];
+    /** §4.2 的提醒阈值，来自设置。卡片不自己定这个数。 */
+    thresholds?: LabelThresholds;
   } = $props();
 
   let expanded = $derived(selected);
@@ -37,9 +46,19 @@
       步行 {formatDistance(totalWalkDistance(route))} · {formatPrice(route.price)}
     </span>
   </div>
-  <p class="mt-1 text-[11px] text-muted-foreground">{burdenReason(route, profile)}</p>
+  <p class="mt-1 text-[11px] text-muted-foreground">{burdenReason(route, profile, thresholds)}</p>
 
-  {#if burden.longestWalk >= 500 || (profile !== "standard" && burden.transfers > 0)}
+  <!-- §4.2 决策标签：优势类在前，提醒类在后 -->
+  {#if labels.length > 0}
+    <div class="mt-2 flex flex-wrap gap-1">
+      {#each labels as label (label.text)}
+        <Badge variant={label.tone === "warning" ? "outline" : "secondary"}
+          class={label.tone === "warning" ? "border-warning text-warning" : ""}>{label.text}</Badge>
+      {/each}
+    </div>
+  {/if}
+
+  {#if burden.longestWalk >= thresholds.longWalkMeters || (profile !== "standard" && burden.transfers > 0)}
     <p class="mt-1 text-[11px] text-warning">设施无障碍信息待确认</p>
   {/if}
 

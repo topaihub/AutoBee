@@ -29,6 +29,19 @@
 **注意前缀撞号**:大模型方案和大赛方案都有 `M1`/`M2`/`M3`。下面一律写成
 `大模型 M1-1` / `大赛 M1-1` 区分,只写 `M1-1` 的地方是有歧义的,别照抄。
 
+## 当前进度(2026-09-24)
+
+**9 / 52 已完成。** C1 全组(4)、M0-1、大赛 M1-1 / M1-2 / M1-3 / M1-4。
+
+**下一条是大赛 M1-5**,但它与 M1-4 都卡在同一处:需要真实窗口里的人工视觉确认。
+M1-4 的代码与 API 面已验完,M1-5 五项里 4 项有实跑证据,只差「覆盖物屏幕可见」。
+本机 Chrome 无头启得起来却从不导航(5 种启动组合下本地服务器 0 请求),模型产不出
+这条证据 —— 需要用户跑一次。
+
+**不被它挡住的下一条是大赛 M2-1**(纯代码,给 `accessibility.ts` 加真实百度样本的
+排序测试)。质量门基线:前端 56、core 64、shell 40、CLI 12,svelte-check 350 files
+0 error,clippy `-D warnings` 0 问题。
+
 ## 为什么是这个顺序
 
 只有三处是**真依赖**(不按顺序会返工),其余都是优先级取舍:
@@ -54,7 +67,7 @@ MCP 缺席不留半成品 —— 这是把它放最后一个里程碑而不是�
 
 ## 第一阶段:重构地基(纯搬迁,不加行为)
 
-### C1 拆出 `autobee-shell` — CLI 方案 §9,行 327-348
+### C1 拆出 `autobee-shell` — CLI 方案 §9,行 323-349
 
 - [x] **C1-1 建 crate 骨架** — `src-tauri/shell/Cargo.toml`,依赖照根包挑 7 项
 - [x] **C1-2 搬模块** — `paths.rs`/`error.rs`/`logging.rs`/`logs.rs`/`credentials/` 五项移进 shell
@@ -77,81 +90,217 @@ MCP 缺席不留半成品 —— 这是把它放最后一个里程碑而不是�
 `memory()`,两条是独立路径)。这条测试经过反向验证:把 `protect` 临时改成
 返回 `None` 后它确实 FAILED。所以那个陷阱不再依赖人工。
 
-### M0 拆 `commands.rs` — 大模型方案 §8,行 632-640
+### M0 拆 `commands.rs` — 大模型方案 §8,行 632-641
 
-- [ ] **M0-1 拆成目录** — `commands.rs`(360 行、12 个 command)拆成
+- [x] **M0-1 拆成目录** — `commands.rs`(360 行、12 个 command)拆成
   `commands/mod.rs` + `commands/map.rs`;`mod.rs` 只做 `pub mod` + `pub use`,
   `lib.rs` 的 `generate_handler!` 不用改
 
-纯搬移,单独一个提交,不掺功能代码。
+**已完成(2026-09-24)。** `pnpm verify` 全绿:前端 56、shell 36、core 50、
+clippy 0 warning、fmt 干净。纯搬移,用 `mv` 而不是手抄,行为零变化。
 
-## 第二阶段:参赛主链路(大赛方案 §8,行 380-454)
+**文档里原本写错的一点(已改正)**:「`pub use` 之后路径不变」只在 glob 下成立。
+`#[tauri::command]` 会在函数旁生成 `__cmd__xxx` / `__tauri_command_name_xxx`
+两个隐藏项,`generate_handler!` 引用的是它们。逐名 `pub use map::{…}` 带不走,
+编译报 24 个 `could not find __cmd__xxx in commands`,报错里不提宏生成。
+必须是 `pub use map::*;`,`mod.rs` 里已写明理由。
+
+## 第二阶段:参赛主链路(大赛方案 §8,行 380-478)
 
 优先于大模型那五组。理由见上面「为什么是这个顺序」。
 
-### 大赛 M1 百度主链路可用 — 行 386-412
+### 大赛 M1 百度主链路可用 — 行 386-436
 
-- [ ] **大赛 M1-1 申请两个 AK** — Web 服务 AK 与 JS API GL 的 AK,两个不通用
-- [ ] **大赛 M1-2 实现 `BaiduProvider`** — 新建 `core/src/providers/baidu.rs`(现在没有这个文件)
-- [ ] **大赛 M1-3 登记进工厂与注册表** — `factory.rs:18-19` 的 `is_implemented` 加百度;
-  `registry.rs` 里百度 priority 改 **0**(不是 1 —— `registry.rs:199` 是稳定排序,
+- [x] **大赛 M1-1 取得 AK** — 实测**一个 AK 两侧通用**,原先「两个不通用」是错的
+- [x] **大赛 M1-2 实现 `BaiduProvider`** — 新建 `core/src/providers/baidu.rs`
+- [x] **大赛 M1-3 登记进工厂与注册表** — `factory.rs` 的 `is_implemented` 加百度;
+  `registry.rs:119` 百度 priority 改 **0**(不是 1 —— `registry.rs:199` 是稳定排序,
   写 1 会与腾讯并列而腾讯在前)
-- [ ] **大赛 M1-4 主地图换百度 JS API GL** — 底图、标注、路线覆盖物全换
-- [ ] **大赛 M1-5 验收整条链路** — POI 联想、选点、三种规划、覆盖物**五项全部来自百度**
+- [x] **大赛 M1-4 主地图换百度 JS API GL** — 底图、标注、路线覆盖物全换;
+  原文「现在是 `tiles.rs` 的 ArcGIS 栅格瓦片」是错的,当时是腾讯 `TMap` GL 矢量 SDK。
+  `BMapGL.Point` 是 **`(lng, lat)`** —— 与百度 Web 服务 API 的 `lat,lng` 相反。
+  **代码已完,但缺一条人工视觉判据**:本机 Chrome 无头启得起来却从不导航
+  (5 种启动组合下本地服务器 0 请求),已改用 SDK 源码逐个核对 API 面代替,
+  详见设计方案行 424-428
+- [ ] **大赛 M1-5 验收整条链路** — POI 联想、选点、三种规划、覆盖物**五项全部来自百度**。
+  **4 项已有实跑证据**(四端点全 `status=0`);第 5 项「覆盖物屏幕可见」需真实 UI,
+  详见设计方案行 430-435
+
+**M1-1 / M1-2 / M1-3 / M1-4 的代码已完成(2026-09-24)。** `pnpm verify` 全绿:core 64 个
+测试(原 50 + 百度新增 14)、shell 40、CLI 12、前端 56,svelte-check 350 files 0 error,
+clippy `-D warnings` 0 问题、fmt 干净。
+
+**M1-5 的四项实跑证据(2026-09-24)。** 真 AK 打四个端点全部 `status=0`:
+`place/v2/search`(3 条,首条「中国国家图书馆」)、`geocoding/v3`(lng=116.3316
+lat=39.9528)、`direction/v2/walking`(1 方案 9725 米)、`direction/v2/transit`。
+**三种规划确实走不同策略**:`tactics_incity=5`(`Subway`)得 5 方案 / 首选 5 段
+= 3 步行 + 2 地铁 / 4059 秒;`=1`(`Bus` 与 `Walking`)得 4 方案 / 首选 3 段
+= 2 步行 + 1 公交 / 5682 秒。**`tactics_incity` 合法范围是 0-5**,传 11 / 13 会
+`status=2`;`baidu.rs:513` 传的 5 与 1 都在范围内。
+
+**M1-1 的结论与原文相反,设置页少一个字段。** 原先写「Web 服务 AK 与 JS API GL AK
+是两个不同的 AK,要分两个字段存」,那是照文档推的。拿用户给的 AK 实测:四个 Web
+服务端点(`place/v2/search`、`geocoding/v3`、`direction/v2/walking`、
+`direction/v2/transit`)全部 `status=0`;`api.map.baidu.com/getscript?type=webgl&v=1.0&ak=…`
+返回 1.2 MB 真实 SDK,里面 `window.B_BUSINESS_INFO={"business":0,"unauth":0,…}`,
+**`unauth: 0` 就是已授权**。所以设置页先只留一个百度 AK 字段。
+
+**`place/v3/region` 评估过,不换,留 v2。** 用户给了百度官方的 v3 示例,逐项拿真
+AK 对比:字段名、零结果行为、`total`、`page_size`、`adcode`、坏 AK 错误形状、
+`detail_info.children`、`navi_location` **八项全同**,八条查询词返回结果一字不差。
+v3 只多一个 `d7_hot_value`(7 天热度)与更多坐标小数位,都用不上。换过去是纯改动
+风险换零收益。
+
+过程中我曾判断「v3 能挡住模糊匹配、v2 不能」,那是**错的** —— 我拿了两个不同查询词
+(`…地名…` 与 `…地址…`)对比。同一条查询词下两个版本都返回贵阳那家 `zzzzt公寓`,
+而那家店真实存在且名字确实以 `zzzz` 开头,返回它对两个版本都正确。
+
+另外官方 v3 参数表写 `type` 是**可选**,用户那份示例注释标「必填」是错的,与实测
+一致(不传、传空都 `status=0`)。`region` 确实必填(不传 `status=2`)。
+
+**`scope=2` 顺带拿到了 M2 要用的东西。** `detail_info.children` 是车站各出入口的
+**真实坐标**(实测南京南站 9 个子点:「北进站口」「出站口」`出入口;车站入口` /
+`出入口;车站出口`,还有各停车场),`navi_location` 是导航上车点。无障碍负担评分要算
+「进出站步行」时,数据已经在响应里,不必改请求。adapter 现在丢掉它们是对的 ——
+`Place` 不该带厂商特有字段(`providers/mod.rs:6-7` 的契约),M2 需要时另开归一化结构。
+
+**照 `amap.rs` 抄之前必须知道的一点**:百度在**同一个接口**里,请求参数与
+响应折线的坐标顺序是**相反**的 —— 请求 `origin`/`destination` 是 `纬度,经度`
+(文档原文「格式为:纬度,经度」),而响应的 `path` 串是 `经度,纬度`
+(公交页对 `path` 的备注给了示例 `"116.321858,40.039183;…"`)。
+`baidu.rs` 里 `location()` 与 `path()` 的顺序**故意是反的**,模块文档写了原因。
+顺手「统一」掉其中一个,得到的是一条经纬度对调的折线:`LatLng` 不校验范围,
+所以不报错,只是线跑到极区。这条已落成测试
+`步行折线按经度在前解析而不是纬度在前`。
+
+**设计文档没写、查官方文档才发现的三点**:
+
+1. **百度公交接口不需要城市参数。** 高德必须先逆地理编码拿 `citycode`
+   (`amap.rs:105` 的 `city_code`),百度的参数表里根本没有 `city` ——
+   起终点坐标就够它定城市,跨城也是同一个接口。比高德少一次请求。
+2. **`steps` 是二维数组**(`steps[i][j]`),不是高德那种平铺的 `segments`。
+   按平铺解会一个分段都取不到,而且**不报错** —— 表现是「算不出路线」。
+   更麻烦的是官方返回参数表把内层命名为 `schemes`,官方响应示例里却是匿名
+   数组,两者矛盾。`sub_steps()` 两种形状都接,各有一条测试。
+3. **公交与地铁共用 `vehicle_info.type = 3`**,区分在 `detail.type`(1 是地铁)。
+   只看 `vehicle_info.type` 会把每条地铁都标成公交,配色与徽标全错。
+
+**`geocode` 的「搜不到」有两条路,原先只接了一条(已修)。** 我先前写「百度整张
+状态码表里没有零结果码,所以只能按结构判」—— 那是照文档推的,拿真 AK 打过之后
+不成立。实测 `address=qwertyuiop asdfghjkl` 返回:
+
+```json
+{"status":1,"msg":"Internal Service Error:无相关结果","results":[]}
+```
+
+`status=1` 在官方状态码表里写的是「服务器内部错误」,百度把零结果塞进了这个码。
+按「非 0 即错误」处理的话 `geocode` **永远返回不了 `Ok(None)`**。两条路现在都接:
+`status=1` 且 `msg` 含「无相关结果」,以及结构不完整(取不到 `/result/location`)。
+
+真故障也是 `status=1`,只能靠 `msg` 那句中文分开。**匹配中文文案是明知其脆弱后
+选的**:不匹配就会把真故障一起咽掉(该提示「百度服务异常」时显示「地址搜不到」);
+匹配则是百度哪天改了文案,行为退回「返回 `Err`」—— 也就是修之前的行为,而
+`resolve_on:75` 用 `.ok().flatten()`、`geocode_place:302` 用 `let Ok(Some(..))`,
+两处都把 `Err` 与 `Ok(None)` 收敛成同一条路,不会因此出故障。坏的方向是安全的。
+
+**还有个挡不住的:百度会模糊匹配。** `zzzz不可能存在的地址zzzz` 返回 `status=0`
+加北京朝阳的坐标(匹配到「北京不可能科技有限公司」)。它的字段签名
+`level=NoClass` / `precise=0` / `confidence=50` / `comprehension=0` 与真实的
+「南京南站」**完全一致** —— 所以不能按这些字段判零结果,那会把站名查询一起毙掉,
+而站名是公交应用最主要的输入。地名类输入靠 `planner.rs:63` 那条
+「先 suggest 再 geocode」的顺序兜。
+
+**错误详情字段在这个端点是 `msg` 而不是 `message`**,两者不同时出现,`ensure_ok`
+要先读 `message` 再回落 `msg`。坏 AK 时四个端点**都**用 `message`(实测 `status=200`
++「APP不存在,AK有误请检查再重试」),所以权限/配额类错误读 `message` 是对的。
+
+**`suggest` 走 `place/v2/search` + `region=全国`,不走 `place/v2/suggestion`**:
+suggestion 的 `region` 是必填的具体城市、固定返回 10 条且没有条数参数,
+接不住 trait 的 `page_size`;两者响应键名还不一样(search 是复数 `results`,
+suggestion 是单数 `result`)。另外 `adcode` 必须传 `extensions_adcode=true`
+才召回,而 adcode 是编排层判境内/境外的依据。
+
+**顺手修掉的两处与百度无关的既有破损**(都在未提交的 `src-tauri/cli/`,
+扩门到 `--workspace` 后才暴露):`args.rs` 的 `Command::Suggest` 少了
+`out_crs` 字段,而 `main.rs:58` 与 `run::suggest` 都在用它,编译不过;
+`args.rs` 测试模块里三处 `panic!` 在 `-D warnings` 下报错,按既有写法
+加进那条 `#[allow]` 的 reason 里。
+
 
 M1-5 是 §5.2「不把百度只当底图」的门槛,不是可选的收尾。
 
-### 大赛 M2 负担评分与解释 — 行 413-439
+### 大赛 M2 负担评分与解释 — 行 437-463
 
-- [ ] **大赛 M2-1 确认指标在百度数据上成立** — 用**真实百度响应**归一化后的样本跑排序;
+- [x] **大赛 M2-1 确认指标在百度数据上成立** — 用**真实百度响应**归一化后的样本跑排序;
   现有 `accessibility.test.ts` 用的是构造数据,证明不了 adapter 字段填对了
-- [ ] **大赛 M2-2 补齐 §6.2 的五种排序** — 切画像排序与文案可见变化,且同画像连点两次结果一致
-- [ ] **大赛 M2-3 决策标签(6 个,现在一个都没有)** — `RouteCard.svelte:49/52`
+- [x] **大赛 M2-2 补齐 §6.2 的五种排序** — 切画像排序与文案可见变化,且同画像连点两次结果一致
+  §6.2 的「依次升序」是**字典序**,加权和实现不出来;`TravelProfile` 由 3 项扩到 5 项
+  详见设计方案 448-462
+- [x] **大赛 M2-3 决策标签(6 个,现在一个都没有)** — `RouteCard.svelte:49/52`
   现在只有地铁/公交两个模式徽标
-- [ ] **大赛 M2-4 阈值挪进设置** — `RouteCard.svelte:42` 现在写死 500 米,违反 §4.2 自己的规定
-- [ ] **大赛 M2-5 守住诚信边界** — `grep -rn "无障碍" src/lib/components src/routes`
+  §4.2 的「低步行」触发条件写成「或」与判据冲突;「少换乘」反过来不能加 tie-break
+  UI 可见性靠 SSR 渲染单独验的,Vite ssrLoadModule 这条路不通
+  详见设计方案 463-476
+- [x] **大赛 M2-4 阈值挪进设置** — `RouteCard.svelte:42` 现在写死 500 米,违反 §4.2 自己的规定
+      落点不是原文说的 `config.rs` 的 `Settings`(那个喂算路),而是 `SettingsDto`,照 `show_logs` 的判例
+      写死的 500 共四处,不止原文点名的那一处;`burdenScore` 里的 `transfers * 500` 是量纲系数不是阈值
+      详见设计方案 477-503
+- [x] **大赛 M2-5 守住诚信边界** — `grep -rn "无障碍" src/lib/components src/routes`
+      判据漏了画像名:「老人/行动缓慢」承诺了应用不具备的判断能力,已改成「少走长段」
+      下拉框旁补了依据说明;六个标签靠两个新真实场景(直达、3 次换乘)全部触发过
+      纯公交方案必须用 TravelMode::Bus 取,Subway 模式会把它全筛掉(baidu.rs:389)
+      详见设计方案 504-531
   每处命中都不能是承诺性说法
 
-### 大赛 M3 展示完整度 — 行 440-454
+### 大赛 M3 展示完整度 — 行 464-478
 
 - [ ] **大赛 M3-1 固化两个演示场景** — 同场景连跑三次结果一致
 - [ ] **大赛 M3-2 四个非正常态** — 各手动触发一次并截图;断网、清空 AK 是最快的触发方式
 - [ ] **大赛 M3-3 录视频** — 3 分钟 + 8 分钟两个,脚本在 §9
 - [ ] **大赛 M3-4 提交材料** — §10 的复选框全部勾上
 
-## 第三阶段:CLI 入口(CLI 方案 §9,行 347-399)
+## 第三阶段:CLI 入口(CLI 方案 §9,行 317-425)
 
-C1 已完成,这三组可以随时开工。与大赛那几组无依赖关系,谁先做都行。
+整段完成:C1 拆 crate、C2 参数解析与 `route`、C3 `suggest` 与 `circle`、C4 进构建管线。
+CLI 已随 `pnpm build:app` 一起产出并进 portable zip,`pnpm smoke:cli` 可对打包产物重跑冒烟。
 
-### C2 参数解析 + `route` — 行 347-373
+### C2 参数解析 + `route` — 行 350-388
 
-- [ ] **C2-1 建 `autobee-cli` crate** — 第三个 crate,不是根包的第二个 bin(理由见 §3.2)
-- [ ] **C2-2 写 `args.rs` 的分词器** — 手写,不引 clap(理由见 §6.2,不是「少几个依赖」)
-- [ ] **C2-3 枚举值从 `ALL` 打印** — `TravelMode::ALL`(`models.rs:160`)、
+- [x] **C2-1 建 `autobee-cli` crate** — 第三个 crate,不是根包的第二个 bin(理由见 §3.2)
+- [x] **C2-2 写 `args.rs` 的分词器** — 手写,不引 clap(理由见 §6.2,不是「少几个依赖」)
+- [x] **C2-3 枚举值从 `ALL` 打印** — `TravelMode::ALL`(`models.rs:160`)、
   `SortBy::ALL`(`models.rs:185`);不许手写第二份清单
-- [ ] **C2-4 exit code 映射** — 表在 §5.3
-- [ ] **C2-5 接上 `route`** — 调 `planner::plan_route`
+- [x] **C2-4 exit code 映射** — 表在 §5.3
+- [x] **C2-5 接上 `route`** — 调 `planner::plan_route`。验收时修掉两个真 bug:
+  `degraded` 错拼进 stdout(违反 §5.2)、`Route.duration` 被当秒又除一次 60
+  (29 分钟的方案显示成「1 分钟」)。详见 §9 C2-5
 
-### C3 `suggest` + `circle` — 行 374-384
+### C3 `suggest` + `circle` — 行 389-405
 
-- [ ] **C3-1 `suggest`** — 调 `planner::suggest_places`(`planner.rs:276`,返回裸 `Vec<Place>`)
-- [ ] **C3-2 `circle`** — 调 `life_circle::life_circle`(`life_circle.rs:154`);
-  注意 `LifeCirclePackage` 只有 `parse`(`models.rs:344`)**没有 `ALL`**,
-  C2-3 那条要用 `ALL` 的话得先加
+- [x] **C3-1 `suggest`** — 调 `planner::suggest_places`(`planner.rs:276`,返回裸 `Vec<Place>`)。
+  它不换坐标系,CLI 必须按各家 `coord_sys` 逐条换到 `--out-crs`;空结果不是错误,
+  但「一个 Key 都没配」要报 `NO_PROVIDER` 而不是装作搜不到
+- [x] **C3-2 `circle`** — 调 `life_circle::life_circle`(`life_circle.rs:154`);
+  `LifeCirclePackage::ALL` 在 `models.rs:364`(本清单早前写「没有 `ALL`」是错的,
+  C2-3 已经在用它),`parse` 在 `models.rs:347`
 
-### C4 进构建管线 — 行 385-399
+### C4 进构建管线 — 行 406-425
 
-- [ ] **C4-1 编译进 release** — `scripts/build-app.bat` 的 `[4/6]`,`tauri build` 调用在行 124
-- [ ] **C4-2 收进 `dist\`** — 同一脚本 `[5/6]`,注释在行 137、echo 在行 139
-- [ ] **C4-3 确认质量门不用改** — `package.json` 的 `test:rust`/`clippy`/`fmt:rust`
-  已经是 `--workspace`/`--all`,新 crate 自动进;跑一次确认
-- [ ] **C4-4 冒烟** — 打出来的 exe 跑三个子命令各一次
+- [x] **C4-1 编译进 release** — `scripts/build-app.bat` 的 `[4/6]` 之后加一步。
+  必须调 `scripts\cargo-msvc.bat`,裸 `cargo` 在本机链接失败
+- [x] **C4-2 收进 `dist\`** — 同一脚本 `[5/6]`。
+  顺带修掉一个真缺陷:`%DIST%` 从不清空,导致本机的 `data\settings.db`
+  被 `Compress-Archive` 打进 portable zip。已在 `[5/6]` 开头加 `rd /s /q "%DIST%"`
+- [x] **C4-3 确认质量门不用改** — 确认过:`verify` 输出里有 `autobee-cli` 的 `16 passed`
+- [x] **C4-4 冒烟** — 打出来的 exe 跑 §8.3 六条,全过。
+  另落 `scripts/smoke-cli.mjs`(`pnpm smoke:cli`),14 项。
+  是 `.mjs` 不是 `.bat`:判据里的地名是中文,`.bat` 必须纯 ASCII
 
 ## 第四阶段:大模型接入(大模型方案 §8,行 628-740)
 
 M0 是它的前置,已在第一阶段列出。
 
-### 大模型 M1 配置层 — 行 641-664
+### 大模型 M1 配置层 — 行 642-665
 
 - [ ] **大模型 M1-1 加两张表** — 同时开 `PRAGMA foreign_keys`。
   **加在 `schema::prepare` 里**(`schema.rs:57`),不是 `store.rs::open_at`(`:40`)——
@@ -162,14 +311,14 @@ M0 是它的前置,已在第一阶段列出。
 - [ ] **大模型 M1-4 五个 command**
 - [ ] **大模型 M1-5 设置页** — 判据含 `settings.db` 里搜不到明文 Key
 
-### 大模型 M2 非流式对话 — 行 665-681
+### 大模型 M2 非流式对话 — 行 666-682
 
 - [ ] **大模型 M2-1 会话两张表**
 - [ ] **大模型 M2-2 `llm/http.rs` 一次性请求**
 - [ ] **大模型 M2-3 `llm_chat_start` 非流式版**
 - [ ] **大模型 M2-4 对话页最小实现**
 
-### 大模型 M3 tool calling(核心)— 行 682-705
+### 大模型 M3 tool calling(核心)— 行 683-706
 
 - [ ] **大模型 M3-1 `llm/tools.rs` 的 schema 与裁剪结构** — 判据第二条
   (裁剪后 `points` 不存在、`crs` 存在)是 §5.3 静默偏差的唯一自动化防线
@@ -179,7 +328,7 @@ M0 是它的前置,已在第一阶段列出。
 - [ ] **大模型 M3-4 system prompt 坐标系硬约束** — 两条判据都要看,
   只看第二条会漏掉「模型编了个好看的时长」
 
-### 大模型 M4 流式 — 行 706-720
+### 大模型 M4 流式 — 行 707-721
 
 - [ ] **大模型 M4-1 提依赖** — `cargo tree` 里不许出现第二个 async runtime
 - [ ] **大模型 M4-2 SSE 解析** — 单测必须含**跨 chunk 切断的行**,
@@ -187,7 +336,7 @@ M0 是它的前置,已在第一阶段列出。
 - [ ] **大模型 M4-3 事件通道**
 - [ ] **大模型 M4-4 `llm_chat_cancel`**
 
-### 大模型 M5 MCP — 行 721-740
+### 大模型 M5 MCP — 行 722-741
 
 固定排最后,理由见上面。
 

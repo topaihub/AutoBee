@@ -85,6 +85,21 @@ export class PlannerState {
 
   constructor(private readonly client: PlannerClient = tauriPlannerClient) {}
 
+  /**
+   * 取百度 JS API GL 的 AK。
+   *
+   * 放在 store 而不是组件里,是因为组件不许直接发 IPC(eslint 的
+   * `no-restricted-imports` 会拦)。这层转发看着是纯代理,但它是组件触达
+   * `PlannerClient` 的唯一通道,也是单测注入假 client 的接缝 —— 删掉它
+   * 地图组件就只能自己 import `tauriPlannerClient`,那条约定就破了。
+   *
+   * 没配 AK 时返回 `null` 而不是抛 —— 那不是故障,是「还没填」,
+   * 由地图组件显示「去设置里填」而不是进错误态。
+   */
+  async mapSdkKey(): Promise<string | null> {
+    return this.client.getMapSdkKey();
+  }
+
   /** 输入变化 → 防抖联想。空文本清空候选。 */
   onInput(field: Field, text: string): void {
     this.#setText(field, text);

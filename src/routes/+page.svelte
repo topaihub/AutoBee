@@ -2,7 +2,7 @@
   /** 参赛主页：安心换乘与 15 分钟生活圈的决策工作台。 */
   import { planner } from "$lib/state/planner.svelte";
   import type { SortBy, TravelMode } from "$lib/ipc/types";
-  import { PROFILE_OPTIONS, routeBurden, type TravelProfile } from "$lib/domain/accessibility";
+  import { DEFAULT_LABEL_THRESHOLDS, PROFILE_OPTIONS, decisionLabels, routeBurden, type LabelThresholds, type TravelProfile } from "$lib/domain/accessibility";
   import { formatDistance, formatDuration } from "$lib/domain/format";
   import { cn } from "$lib/utils/cn";
   import Button from "$lib/components/ui/button/Button.svelte";
@@ -44,6 +44,15 @@
   ];
   const recommendedRoute = $derived(planner.routes[0] ?? null);
   const recommendedBurden = $derived(recommendedRoute ? routeBurden(recommendedRoute) : null);
+  // 决策标签对整组候选算一次。放在这里而不是卡片里，是因为「在候选中最低」
+  // 这类相对判断需要看到全部候选。
+  // 阈值来自设置（§4.2:不许写死在 UI）。偏好还没加载完时用同一组默认值，
+  // 与后端 `DEFAULT_LONG_WALK_METERS` / `DEFAULT_MANY_TRANSFERS` 对应。
+  const thresholds = $derived<LabelThresholds>({
+    longWalkMeters: providers.settings?.longWalkMeters ?? DEFAULT_LABEL_THRESHOLDS.longWalkMeters,
+    manyTransfers: providers.settings?.manyTransfers ?? DEFAULT_LABEL_THRESHOLDS.manyTransfers,
+  });
+  const routeLabels = $derived(decisionLabels(planner.routes, thresholds));
   function setMode(v: string) { planner.setMode(v as TravelMode); }
   function setSort(v: string) { planner.sort = v as SortBy; }
   function setProfile(v: string) { planner.setProfile(v as TravelProfile); }
@@ -115,6 +124,8 @@
           </div>
           <label class="text-xs font-medium" for="profile">出行画像</label>
           <Select id="profile" options={PROFILE_OPTIONS} value={planner.profile} onchange={(e) => setProfile(e.currentTarget.value)} />
+          <!-- §6.3:把判断依据写在用户看得见的地方。沉默会被读成「设施没问题」。 -->
+          <p class="text-[11px] text-muted-foreground">依据仅为步行距离与换乘次数；电梯、坡道、台阶等设施信息尚未接入。</p>
         </section>
 
         {#if recommendedRoute && recommendedBurden}
@@ -122,7 +133,7 @@
             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-primary">Recommended</p>
             <h3 class="mt-1 text-sm font-semibold">为「{PROFILE_OPTIONS.find((item) => item.value === planner.profile)?.label}」推荐方案 1</h3>
             <div class="mt-3 flex items-end gap-3"><strong class="text-2xl font-semibold">{formatDuration(recommendedRoute.duration)}</strong><span class="pb-0.5 text-xs text-muted-foreground">步行 {formatDistance(recommendedBurden.walkDistance)} · 换乘 {recommendedBurden.transfers} 次</span></div>
-            <p class="mt-2 text-xs text-muted-foreground">{recommendedBurden.longestWalk > 500 ? `最长步行 ${Math.round(recommendedBurden.longestWalk)} 米，请预留体力。` : "在当前画像下，步行与换乘负担更低。"}</p>
+            <p class="mt-2 text-xs text-muted-foreground">{recommendedBurden.longestWalk > thresholds.longWalkMeters ? `最长步行 ${Math.round(recommendedBurden.longestWalk)} 米，请预留体力。` : "在当前画像下，步行与换乘负担更低。"}</p>
           </section>
         {/if}
         {#if planner.error}<p class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{planner.error}</p>{/if}
@@ -131,7 +142,7 @@
           <Separator />
           <section class="flex flex-col gap-2" aria-labelledby="routes-heading">
             <div class="flex items-baseline justify-between"><h2 id="routes-heading" class="text-xs font-semibold text-muted-foreground">{planner.routes.length} 个候选方案</h2><span class="text-[11px] text-muted-foreground">百度 · {planner.plan.provider}</span></div>
-            {#each planner.routes as route (route.id)}<RouteCard {route} profile={planner.profile} selected={planner.selectedRouteId === route.id} onselect={() => planner.selectRoute(route.id)} />{/each}
+            {#each planner.routes as route (route.id)}<RouteCard {route} {thresholds} profile={planner.profile} selected={planner.selectedRouteId === route.id} labels={routeLabels[route.id] ?? []} onselect={() => planner.selectRoute(route.id)} />{/each}
           </section>
         {:else if !planner.loading && !planner.error}
           <div class="rounded-lg border border-dashed p-4 text-xs text-muted-foreground"><p>输入起点和终点，开始比较安心方案。</p><p class="mt-1">也支持直接输入「纬度,经度」坐标。</p></div>

@@ -25,6 +25,11 @@ src-tauri/gen/schemas/
 # 锚定:不加斜杠会吞掉 node-gyp 自带的 gyp/data/(两个源文件)。
 /data/
 *.log
+# 手写的 Key 清单。本项目真实出现过 —— 放在仓库根、不加这条就会被 git add 带走。
+# 正式存放位置是设置页(落到 %LOCALAPPDATA%\AutoBee 的 DPAPI 加密库),
+# 这个文件只是把 Key 交给开发/联调用,不是配置来源。
+/key.txt
+/keys.txt
 
 # 随手跑出来的临时文件（曾经的验证脚本、改坏前的备份）
 *.bak

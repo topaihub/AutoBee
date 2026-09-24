@@ -10,8 +10,8 @@ use route_core::config::{Config, Settings};
 use route_core::models::{Crs, ProviderId};
 use route_core::tiles::DEFAULT_TILE_SOURCE;
 
-use super::SettingsDto;
 use super::store::Store;
+use super::{DEFAULT_LONG_WALK_METERS, DEFAULT_MANY_TRANSFERS, SettingsDto};
 use crate::error::AppError;
 
 /// 组装一份完整的 [`Config`]。
@@ -45,6 +45,54 @@ pub fn load_config() -> Result<Config, AppError> {
 
     config.settings = load_settings_from(&store)?;
     Ok(config)
+}
+
+/// 取百度 AK 的**明文**,供浏览器内的 JS API GL 用。
+///
+/// # 为什么只有百度有这个函数
+///
+/// 其余厂商都只在 Rust 侧调 HTTP,明文不必离开进程,走
+/// [`MapProviderDto::api_key_masked`](super::MapProviderDto) 的掩码就够。百度
+/// 不一样:JS API GL 是浏览器内渲染,SDK 脚本的 URL 里必须带明文 AK
+/// (`api.map.baidu.com/getscript?...&ak=明文`),这是该 SDK 的既定用法,
+/// 没有「代理掉」的办法 —— 脚本是百度的域,请求由浏览器直接发。
+///
+/// # 这个明文会泄露,是已知代价
+///
+/// AK 一旦进了 WebView 就能被读出来。唯一的缓解是在百度控制台给浏览器端
+/// 应用配 **Referer 白名单**,那样泄出去的 AK 在别处用会被判 `status=210`。
+/// 而服务端调用不带 Referer,配了白名单反而会把 [`load_config`] 那条链路打死 ——
+/// 所以「一个 AK 同时干两件事」必然两种限制都用不上。
+///
+/// 当前选择是单 AK、不配白名单,换取少建一个应用、少一个设置字段。要收紧就在
+/// 控制台另建一个浏览器端应用,把它的 AK 单独存一份,只改这个函数的取值来源。
+///
+/// # Errors
+///
+/// 档案库打不开或读不出来时返回错误。
+///
+/// 百度没配 Key、被用户停用、或 Key 是空串时返回 `Ok(None)` —— 那不是故障,
+/// 调用方据此显示「请先在设置里填百度 AK」而不是报错。
+pub fn baidu_sdk_key() -> Result<Option<String>, AppError> {
+    let store = Store::open()?;
+    baidu_sdk_key_from(&store)
+}
+
+/// [`baidu_sdk_key`] 的可测部分:库已经开好了。
+fn baidu_sdk_key_from(store: &Store) -> Result<Option<String>, AppError> {
+    let slug = ProviderId::Baidu.as_str();
+    // 停用的厂商不给 Key:用户在设置页关掉百度之后,地图不该还在用它的配额。
+    // `list()` 已经带了 enabled,不必另查一次。
+    let enabled = store
+        .list()?
+        .iter()
+        .any(|dto| dto.slug == slug && dto.enabled);
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(store
+        .secret_of(slug)?
+        .filter(|plain| !plain.trim().is_empty()))
 }
 
 /// 读界面偏好。缺的键用默认值 —— 用户从旧版本升上来时那些键还不存在。
@@ -105,6 +153,16 @@ pub fn load_settings() -> Result<SettingsDto, AppError> {
             .collect(),
         // 默认关：日志面板是排查用的，平时占掉一块界面。
         show_logs: store.pref("show_logs")?.map(|v| v == "1").unwrap_or(false),
+        // 缺键与非法值都退回 §4.2 的保守默认（500 米 / 2 次）。前端
+        // `DEFAULT_LABEL_THRESHOLDS` 是同一组数字，改这里要一起改。
+        long_walk_meters: store
+            .pref("long_walk_meters")?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(DEFAULT_LONG_WALK_METERS),
+        many_transfers: store
+            .pref("many_transfers")?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(DEFAULT_MANY_TRANSFERS),
     })
 }
 
@@ -132,12 +190,15 @@ pub fn save_settings(dto: &SettingsDto) -> Result<(), AppError> {
     store.set_pref("tile_source", &dto.tile_source)?;
     store.set_pref("default_providers", &dto.default_providers.join(","))?;
     store.set_pref("show_logs", if dto.show_logs { "1" } else { "0" })?;
+    store.set_pref("long_walk_meters", &dto.long_walk_meters.to_string())?;
+    store.set_pref("many_transfers", &dto.many_transfers.to_string())?;
     Ok(())
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "测试里断言失败即测试失败")]
 mod tests {
+    use super::super::MapProviderInput;
     use super::super::store::Store;
     use super::*;
 
@@ -206,5 +267,78 @@ mod tests {
             load_settings_from(&store).unwrap().default_providers,
             vec![ProviderId::Amap, ProviderId::Tencent]
         );
+    }
+
+    #[test]
+    fn 没填百度_ak_时给_none_而不是报错() {
+        // 全新安装:预置了六家但都没有 Key。报错会让地图直接进错误态,
+        // 而正确的表现是提示用户去设置里填。
+        let store = Store::memory().unwrap();
+        assert_eq!(baidu_sdk_key_from(&store).unwrap(), None);
+    }
+
+    #[test]
+    fn 填了百度_ak_时拿到明文而不是掩码() {
+        // 这是这个函数存在的唯一理由:JS API GL 的脚本 URL 里必须是明文。
+        // 拿到掩码串的话地图会加载一个 ak=FAKE****TEST 的脚本,百度判 AK 有误。
+        let store = Store::memory().unwrap();
+        store
+            .save(&MapProviderInput {
+                slug: "baidu".to_string(),
+                name: "百度地图".to_string(),
+                enabled: true,
+                priority: None,
+                api_key: Some("Cz2b5EGUiLoBgSXaYcsdEo9nG3V2z26a".to_string()),
+            })
+            .unwrap();
+        assert_eq!(
+            baidu_sdk_key_from(&store).unwrap().as_deref(),
+            Some("Cz2b5EGUiLoBgSXaYcsdEo9nG3V2z26a")
+        );
+    }
+
+    #[test]
+    fn 用户停用百度后不再下发_ak() {
+        // 关掉百度之后地图还拿着 AK 渲染,等于继续消耗他的配额 ——
+        // 而界面上显示的是「已停用」。
+        let store = Store::memory().unwrap();
+        store
+            .save(&MapProviderInput {
+                slug: "baidu".to_string(),
+                name: "百度地图".to_string(),
+                enabled: true,
+                priority: None,
+                api_key: Some("ak-明文".to_string()),
+            })
+            .unwrap();
+        assert!(baidu_sdk_key_from(&store).unwrap().is_some());
+
+        store
+            .save(&MapProviderInput {
+                slug: "baidu".to_string(),
+                name: "百度地图".to_string(),
+                enabled: false,
+                priority: None,
+                api_key: None,
+            })
+            .unwrap();
+        assert_eq!(baidu_sdk_key_from(&store).unwrap(), None);
+    }
+
+    #[test]
+    fn 填了又清空等于没填() {
+        // 空串存进库之后,`secret_of` 给的是 `Some("")`。不过滤的话
+        // 脚本 URL 变成 `&ak=`,百度返回的是权限错误而不是「没填」。
+        let store = Store::memory().unwrap();
+        store
+            .save(&MapProviderInput {
+                slug: "baidu".to_string(),
+                name: "百度地图".to_string(),
+                enabled: true,
+                priority: None,
+                api_key: Some("   ".to_string()),
+            })
+            .unwrap();
+        assert_eq!(baidu_sdk_key_from(&store).unwrap(), None);
     }
 }

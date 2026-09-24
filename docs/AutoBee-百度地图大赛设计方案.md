@@ -82,8 +82,12 @@ flowchart LR
 | --- | --- | --- |
 | 普通通勤 | 时间、换乘均衡 | 比最快方案多 3 分钟，少换乘 1 次 |
 | 拖行李 | 提高总步行、最长单段步行权重 | 避免 760 米连续步行，适合携带行李 |
-| 老人/行动缓慢 | 提高换乘、最长步行、设施未知权重 | 换乘少，步行段更短，请预留 8 分钟余量 |
+| 少走长段 | 提高换乘、最长步行权重 | 换乘少，步行段更短，请预留 8 分钟余量 |
 | 婴儿车 | 提高步行和换乘权重 | 少一次上下换乘，路径更稳定 |
+
+> 这一栏原文写的是「老人/行动缓慢」，并带一项「设施未知权重」。两处都按 M2-5 改了：
+> 没有任何设施字段，所谓「设施未知权重」无从计算；而那个画像名承诺了应用不具备的
+> 判断能力。详见 M2-5 的实测记录。
 
 **首期数据边界**：百度路线结果可直接提供路线、步行段、交通分段与站点；“电梯可用”不能靠猜测生成。设施不足时显示“需确认站内无障碍设施”，而不是伪造无障碍承诺。
 
@@ -137,7 +141,7 @@ flowchart LR
 
 已融入 AutoBee 的源码：
 
-- `src/lib/domain/accessibility.ts`：从现有统一 `Route` 计算总步行、最长步行、线路变更次数；按普通、行李/婴儿车、老人/行动缓慢画像给候选方案排序。
+- `src/lib/domain/accessibility.ts`：从现有统一 `Route` 计算总步行、最长步行、线路变更次数；按普通、行李/婴儿车、少走长段画像给候选方案排序。
 - `src/lib/components/app/RouteCard.svelte`：展示可解释的负担原因；在长步行或非普通画像存在换乘时显示“设施无障碍信息待确认”。
 - `src/lib/state/planner.svelte.ts`：切换画像只对当前候选本地重排，不重复调用路线 API。
 - `src/lib/domain/accessibility.test.ts`：覆盖负担指标、行李画像排序和长步行提示。
@@ -145,7 +149,7 @@ flowchart LR
 
 尚未实现且必须使用百度数据完成的部分：
 
-- `BaiduProvider` 与 JS API GL 主链路。当前 `factory.rs:19` 的 `is_implemented` 只认 `Tencent | Amap`，百度即使填了 AK 也选不中；主地图仍是 `tiles.rs` 的 ArcGIS 栅格瓦片。
+- ~~`BaiduProvider` 与 JS API GL 主链路~~（M1-2 / M1-3 / M1-4 已完成）。原文这里写“主地图仍是 `tiles.rs` 的 ArcGIS 栅格瓦片”是错的 —— 当时的主地图是腾讯 `TMap` GL 矢量 SDK，详见 M1-4 的实测记录。
 - 电梯、坡度、路缘坡道、施工与实时公交的事实证据。
 - 4.2 的六个决策标签（低步行、少换乘、直达优先、时间最短、长步行提醒、多换乘提醒）。`RouteCard.svelte` 目前只有“地铁”“公交”两个模式徽标，决策标签一个都没有。
 - 阈值可配置。`RouteCard.svelte:42` 把 500 米写死在模板里，与 4.2 末尾“不应写死在 UI”相冲突。
@@ -385,39 +389,67 @@ src/routes/+page.svelte                  # 已有出行画像选择器（PROFILE
 
 ### M1 百度主链路可用
 
-- [ ] **M1-1 申请两个 AK**
-  - 百度地图开放平台建应用，分别取 **Web 服务 AK**（服务端调用）与 **JS API GL AK**（浏览器内地图）。
-  - 这是两个不同的 AK，用错一个的表现是“请求通了但 `status` 非 0”，不是网络错误。设置页里要分两个字段存，不要合成一个。
-  - 判据：两个 AK 都能用 curl / 浏览器各打通一次最小请求。
-- [ ] **M1-2 实现 `BaiduProvider`**
+- [x] **M1-1 取得 AK**（2026-09-24 完成，实测推翻了原文断言）
+  - 百度地图开放平台建应用取 AK。原文写「Web 服务 AK 与 JS API GL AK 是两个不同的 AK，设置页要分两个字段存」——**实测不成立**。
+  - 用户提供的那一个 AK 两边都通：Web 服务侧 `place/v2/search`、`geocoding/v3`、`direction/v2/walking`、`direction/v2/transit` 四个端点全部 `status=0`；浏览器侧 `api.map.baidu.com/getscript?type=webgl&v=1.0&ak=…` 返回 1.2 MB 真实 SDK，内含 `window.B_BUSINESS_INFO={"business":0,"unauth":0,…}` —— **`unauth: 0` 即已授权**，且响应里有 `BMapGL` 构造函数。
+  - 一个应用可以同时勾选多类服务，是不是两个 AK 取决于开放平台里怎么建应用，不是 SDK 的硬要求。所以设置页**先只留一个百度 AK 字段**；真遇到只开通一侧的 AK 再拆，那时的表现是 `getscript` 里 `unauth` 非 0（浏览器侧）或 `status=200` + 「APP不存在，AK有误请检查再重试」（服务侧），两者都能明确报出来。
+  - 判据（已达成）：四个 Web 服务端点各打通一次 + `getscript` 返回 `unauth: 0`。
+- [x] **M1-2 实现 `BaiduProvider`**
   - 新建 `src-tauri/core/src/providers/baidu.rs`，实现 `RouteProvider` 的四个方法（`providers/mod.rs:36-61`）：`id()`、`suggest(&str, usize) -> Result<Vec<Place>, _>`、`geocode(&str) -> Result<Option<Place>, _>`、`plan_route(&RouteRequest)`。
   - `suggest` 搜不到时返回 `Ok(vec![])`、`geocode` 搜不到时返回 `Ok(None)`，都**不是错误**（trait 文档里写明了）。把空结果当错误抛，调用方那条“退到地址解析”的兜底就永远走不到。
   - 照 `providers/amap.rs` 的形状写：同样的 `http::get_json`、同样的错误码约定、同样的 `mod tests`。不要另起一套。
   - 坐标系填 `Crs::Bd09`（`models.rs` 已有该枚举）。百度返回的是 BD-09，填错的后果是全图偏移几百米而不报错。
   - 判据：`cargo test -p route-core` 全绿，含新加的响应解析单测（喂一段真实百度响应的 JSON 片段，断言解出的字段与坐标系）。
-- [ ] **M1-3 登记进工厂与注册表**
+  - **实测补正(2026-09-24,以官方文档为准)**:下面几条是照 `amap.rs` 抄会踩的坑,原文没写。
+    - 百度在**同一个接口**里请求与响应的坐标顺序**相反**:请求 `origin`/`destination` 是 `纬度,经度`,响应 `path` 折线是 `经度,纬度`。`baidu.rs` 里 `location()` 与 `path()` 的顺序故意是反的,别「统一」 —— `LatLng` 不校验范围,弄反不报错,只是折线跑到极区。
+    - 公交响应的 `steps` 是**二维**数组(`steps[i][j]`),不是高德那种平铺 `segments`;按平铺解会一个分段都取不到且不报错。官方返回参数表把内层叫 `schemes`、官方示例里却是匿名数组,两者矛盾,`sub_steps()` 两种都接。
+    - 公交与地铁**共用** `vehicle_info.type = 3`,区分在 `detail.type`(1 是地铁)。只看 `vehicle_info.type` 会把每条地铁标成公交,配色与徽标全错。
+    - 百度公交接口**不需要城市参数**:高德要先逆地理编码拿 `citycode`(`amap.rs:105`),百度参数表里没有 `city`,起终点坐标就够,跨城同一个接口。比高德少一次请求。
+    - `suggest` 走 `place/v2/search` + `region=全国`,不走 `place/v2/suggestion`:后者 `region` 必填具体城市、固定 10 条无条数参数,接不住 trait 的 `page_size`,且响应键名是单数 `result`(search 是复数 `results`)。`adcode` 要传 `extensions_adcode=true` 才召回,而它是判境内/境外的依据。
+    - `geocode` 的「搜不到」有**两条**路,都要接:
+      - `status=1` 且 `msg` 含「无相关结果」(实测 `address=qwertyuiop asdfghjkl`,原文 `{"status":1,"msg":"Internal Service Error:无相关结果","results":[]}`)。`1` 在官方状态码表里写的是「服务器内部错误」,百度把零结果塞进了这个码。**只按 `status != 0` 抛错就永远返回不了 `Ok(None)`**。真故障也是 `status=1`,两者只能靠 `msg` 那句中文分开 —— 匹配文案是明知其脆弱的选择,百度改文案则退回「返回 Err」,而 `resolve_on:75` 与 `geocode_place:302` 两处调用方都用 `.ok()` 把 `Err` 与 `Ok(None)` 收敛成同一条路,不会因此出故障。坏的方向是安全的。
+      - 结构不完整(取不到 `/result/location`)。
+    - 这个端点的错误详情字段是 **`msg`**,不是别处的 `message`,且两者不同时出现。`ensure_ok` 要 `message` 再回落 `msg`,否则那种响应只剩一句「未知错误」。坏 AK 时四个端点**都**是 `message`(实测 `status=200` + 「APP不存在,AK有误请检查再重试」),所以权限/配额类错误读 `message` 是对的。
+    - **`geocode` 挡不住百度的模糊匹配,这是已知局限。** 实测 `zzzz不可能存在的地址zzzz` 返回 `status=0` + 北京朝阳的坐标(匹配到「北京不可能科技有限公司」),字段签名是 `level=NoClass`、`precise=0`、`confidence=50`、`comprehension=0` —— 与真实的「南京南站」**完全一致**。所以不能按 `level`/`comprehension` 判零结果,那会把站名查询一起毙掉。地名类输入必须先走 `suggest`(`planner.rs:63` 的顺序就是为这个)。
+- [x] **M1-3 登记进工厂与注册表**
   - `factory.rs:19` 的 `is_implemented` 加 `ProviderId::Baidu`；`create_provider` 的 `match` 加一条 case。
-  - `registry.rs:110` 那条 `ProviderMeta` 的 `priority` 现在是 `4`，国内组里排最后（腾讯 1、高德 2、天地图 3）。要让百度成为国内首选就改成 `0`。
+  - `registry.rs:119` 那条 `ProviderMeta` 的 `priority` 现在是 `4`，国内组里排最后（腾讯 1、高德 2、天地图 3）。要让百度成为国内首选就改成 `0`。
   - **不要改成 `1`**：`registry.rs:199` 是 `sort_by_key`，稳定排序，和腾讯的 `1` 打平时按注册表里的出现顺序决定，而腾讯在 `registry.rs:73` 比百度靠前 —— 结果还是腾讯第一，改了却看不出任何变化。
   - **这一步漏了，前两步等于没做**：adapter 写好了但 `is_implemented` 不认它，设置页会继续标“待接入”，编排层静默跳过它，而且没有任何报错（`factory.rs:15-16` 记的就是这个坑）。
   - 改 `priority` 会让 `registry.rs:246` 的 `国内按优先级排序` 测试失败 —— 它断言的是 `[Tencent, Amap, Baidu]`。那是这次改动的**预期结果**，把断言更新成新次序，不要删掉这个测试。
   - 判据：设置页里百度不再标“待接入”；填入 Web 服务 AK 后规划一次南京的地铁路线，日志里 provider 是 `baidu`；`cargo test -p route-core` 全绿。
-- [ ] **M1-4 主地图换百度 JS API GL**
-  - `MapCanvas.svelte` 现在画的是 `tiles.rs` 的 ArcGIS 栅格瓦片（`TILE_SOURCES` 只有一项）。换成 JS API GL 是替换渲染层，不是加一个瓦片源。
-  - `tauri.conf.json:23` 的 `csp` 当前是 `null`，所以加载外部脚本不需要改配置。**但这也意味着现在没有任何 CSP** —— 若评审要求收紧，收紧的同时必须把百度的脚本域与接口域列进白名单，否则地图会空白。
-  - JS API GL 的 AK 会出现在前端代码里，这是该 SDK 的既定用法；在开放平台侧配好 Referer 白名单，别把 Web 服务 AK 也一起下发到前端。
-  - 判据：地图底图、标注、路线覆盖物全部来自百度；`pnpm dev:app` 里拖动缩放不卡；断网时给出明确错误态而不是白屏。
-- [ ] **M1-5 验收整条链路**
+- [x] **M1-4 主地图换百度 JS API GL**（2026-09-24 完成，实测推翻了原文两处断言）
+  - **原文说「现在画的是 `tiles.rs` 的 ArcGIS 栅格瓦片」，错了。** 实际是腾讯 `TMap` GL 矢量 SDK：`app.html:8` 用 `<script src="https://map.qq.com/api/gljs?...key=明文">` 硬编码了一个腾讯 key，`MapCanvas.svelte` 全文走 `TMap.MultiPolyline` / `TMap.MultiMarker`。`get_map_sdk_key` 这条 command 与前端 `client.ts:46` 的调用早就存在，返回的是腾讯 key。所以 M1-4 不是「新建下发通道」，是把已有通道从腾讯改到百度。
+  - **`BMapGL.Point` 是 `(lng, lat)`，经度在前** —— 与百度 Web 服务 API 的 `location=lat,lng` 相反，同一家两套接口两个顺序。从压缩后的 SDK 源码里核实：`function t(t,e){this.lng=+t,this.lat=+e}`。写反不报错，点落到地球另一边，所以组件里只留 `pt()` 一个构造入口。
+  - **不能用官方 `api?v=3.0&type=webgl` 那个入口**：它的响应体是 `document.write('<script src="…getscript…">')`，页面加载完之后再执行会把整个文档冲掉。直接注入它内部指向的 `getscript?type=webgl&v=1.0&ak=…`，外加配套 `https://api.map.baidu.com/res/webgl/10/bmap.css`（缺 CSS 是控件与标注错位，不是白屏）。
+  - **BMapGL 没有 `MultiPolyline` / `MultiMarker` 这种批量图层**，只有 `addOverlay` / `removeOverlay`。叠加物要自己存数组并逐个回收，漏了就越画越花 —— 这是渲染结构的改动，不是改名字。腾讯的 `fitBounds` 对应 `setViewport(points, { margins })`，后者自己算中心与级别，不必再 `setCenter` + 夹 zoom。
+  - AK 不写进 `app.html`：那等于把明文 AK 提交进仓库。改为组件取到 AK 后再注入 SDK；AK 经 `planner.mapSdkKey()` 取（组件被 eslint 的 `no-restricted-imports` 禁止直接发 IPC）。
+  - 底图是 BD-09，而后端按设置页的 `out_crs` 转换。两者不一致时路线相对底图偏移几百米且**不报任何错**，所以 `plan.crs !== "BD09"` 时在地图上压一条显式告警，不静默画。
+  - 判据(部分达成)：`pnpm run check` 350 files 0 error;`lint` 干净;`test` 56 passed;`clippy -D warnings` 0 问题;Rust 116 passed。
+  - **视觉验证在本机无头环境里没做成,不要再重试。** Chrome 能启动(GCM 日志可见、网络正常),但**从不发起导航** —— 本地静态服务器在 5 种启动组合下都是 0 条请求记录,而同一个 URL 用 `node` fetch 稳定 200。已排除的路线:自建 CDP over WebSocket(promise 永不 resolve)、`start /b`(吞掉 URL)、`hub` 托管进程、`--dump-dom` + `--virtual-time-budget`、绝对 ASCII 的 `--user-data-dir`(怀疑过仓库路径含中文,换成 `C:\Windows\Temp` 后仍然 0 请求)。Playwright / Puppeteer 驱动的是同一个 Chrome,不是不同手段。
+  - 无头跑不动,所以改用**拿 SDK 源码逐个核对 API 面**,这条是真跑过的:`getscript?type=webgl` 200 / 1217114 字节,`res/webgl/10/bmap.css` 200 / 26430 字节;SDK 的命名空间对象(压缩名 `ci`)上导出 110 个构造器,组件用到的 `Point` `Map` `Polyline` `Icon` `Size` `Marker` **全部存在**,`MultiPolyline` / `MultiMarker` **确实不存在**(印证 421 那条);组件调用的 8 个 Map 方法 `centerAndZoom` `enableScrollWheelZoom` `addOverlay` `removeOverlay` `setViewport` `setCenter` `getZoom` `setZoom` 在 SDK 里**全部有对应 `function` 定义**;`MapCanvas.svelte` 全文**已无 `TMap` 残留**。
+  - **`setViewport` 抛 `Cannot read properties of null (reading 'coordType')` 不是调用方式的问题,别去改传参。** GL 分支读的是 `ci.coordType` —— SDK 自己命名空间上的常量,源码里 `ci.coordType="BMAP_COORD_BD09"` 就是默认值,与传入的点对象无关。同理 `strokeStyle: "dashed"` 是对的:`Polyline` 默认配置就是 `strokeStyle:"solid"`,校验逻辑显式接受 `dashed`;只收 solid/dashed 的 `lineStyle` 属于另一个绘图工具类,不是 `Polyline`。
+  - **仍缺一条人工判据**:在真实窗口里跑一次,确认底图、2 个端点 Marker、5 段路线 Polyline 可见且 `setViewport` 后路线完整入框。模型在本机无法产出这条证据。
+  - `tauri.conf.json:23` 的 `csp` 仍是 `null`，所以加载外部脚本不需要改配置。**但这也意味着现在没有任何 CSP** —— 若评审要求收紧，必须把 `api.map.baidu.com` 的脚本域与接口域列进白名单，否则地图会空白。
+- [ ] **M1-5 验收整条链路**（五项里 4 项已有运行时证据，2026-09-24 实跑）
   - 判据：输入 POI 联想、选点、地铁/公交/步行三种规划、路线覆盖物，**五项全部来自百度**。这就是 5.2 那条“不把百度只当底图”的门槛。
+  - 真 AK 实跑四个端点全部 `status=0`：`place/v2/search`（“国家图书馆”3 条，首条“中国国家图书馆”）；`geocoding/v3`（中关村南大街 33 号 → lng=116.3316 lat=39.9528）；`direction/v2/walking`（天安门东→国家图书馆，1 方案 9725 米）；`direction/v2/transit` 两种策略。
+  - **三种规划确认走不同策略且结果真的不同**：`tactics_incity=5`（`TravelMode::Subway`）得 5 方案 / 首选 5 段 = 3 步行 + 2 地铁 / 4059 秒；`=1`（`Bus` 与 `Walking` 走少换乘）得 4 方案 / 首选 3 段 = 2 步行 + 1 公交 / 5682 秒。这同时印证了 `vehicle_info.type==5` 为步行、`==3` 且 `detail.type==1` 为地铁这套判定。
+  - **`tactics_incity` 的合法范围是 0-5**，传 11 / 13 会得到 `status=2` + `message="tactics_incity:必须是整数;最小值是0;最大值是5"`。`baidu.rs:513` 传的 5 与 1 都在范围内。
+  - **仍缺第 5 项**：覆盖物在屏幕上可见。需真实 UI 交互，原因同 M1-4。
 
 ### M2 负担评分与解释
 
 指标计算与画像排序已在源码里（0.6），这一组要做的是三件事：把它接到百度数据上、补齐 6.2 那五种排序里还缺的三种、把 4.2 那六个决策标签从零做出来。
 
-- [ ] **M2-1 确认指标在百度数据上成立**
+- [x] **M2-1 确认指标在百度数据上成立**（2026-09-24 完成）
   - `accessibility.ts` 算总步行、最长步行、线路变更次数，它吃的是归一化后的 `Route` / `Segment`。百度 adapter 必须把这些字段填对，否则评分静默变成 0。
   - 判据：`accessibility.test.ts` 之外，加一条用**真实百度响应**归一化后的样本数据跑排序的测试。现有测试用的是构造数据，它证明不了 adapter 填对了字段。
-- [ ] **M2-2 补齐 6.2 的五种排序**
+  - fixture 在 `src/lib/domain/__fixtures__/baidu-transit-normalized.json`，**必须由真实响应过一遍 Rust adapter 生成，不能手写**：手写等于又造一份构造数据，证明不了任何事。生成路径是抓真实 transit 响应 → 过 `baidu.rs` 的 `transit()` → `serde_json` 序列化。导出用的那个 `#[ignore]` 测试用完即删，不留在仓库里。
+  - 实测样本（天安门东 → 国家图书馆，`tactics_incity=5`）：3 条方案，各 3 段步行 + 2 段地铁，总步行 **3009 / 3107 / 3215 米**，最长步行 1345 / 1345 / 1413，换乘各 1 次，`duration` 68 / 71 / 72 分钟。三条步行负担互不相同这点很关键 —— 字段填错最典型的表现就是三条全一样，那时排序退化成无意义的稳定排序而**不报错**。
+  - **JSON 导入的类型坑**：TS 会把 `kind` 宽化成 `string`、`bounds` 宽化成数组（不是二元组），直转 `Route[]` 会被 svelte-check 拒。**不要用 `as unknown as Route[]` 消错** —— 那会把真实的形状错配一起藏掉，正好废掉这个 fixture 的意义。改为显式重建二元组 + `satisfies Route`，并在运行时校验 `kind` 只有 walk / transit 两种取值。
+  - 这 6 条测试做过变异验证，5 种字段填错**全部**被抓到：`kind` 全填 transit、`kind` 填非法值 ride、`distance` 全填 0、`line.title` 全填同一个、`duration` 全填 0。
+- [x] **M2-2 补齐 6.2 的五种排序**（2026-09-24 完成，实测修正了原文一处做法）
   - 先分清两个互不相干的维度，6.2 把它们混在一张清单里了：
     - `SortBy`（`models.rs:166`、`types.ts:16`）只有 `Time | Distance` 两项，是**后端**枚举。
     - `TravelProfile`（`accessibility.ts:4`）有 `standard | luggage | slow` 三项，是**纯前端**的出行画像，后端不认。
@@ -425,17 +457,78 @@ src/routes/+page.svelte                  # 已有出行画像选择器（PROFILE
   - 所以这一条要做的是补 `burdenScore` 的权重分支，让“少换乘”“低步行”各有一套明确权重，而不是给 `SortBy` 加成员 —— 给 `SortBy` 加成员要一路改到 Rust 侧算路，而排序只影响展示。
   - 排序必须确定性：`sortedRoutes` 要用稳定排序，并且分数相同时有明确的次级比较字段，不能每次刷新换一个顺序。
   - 判据：同一对起终点切换画像，排序与解释文案**可见变化**；连点两次同一画像，结果完全一致；`accessibility.test.ts` 里每个画像各有一条断言。
-- [ ] **M2-3 决策标签（6 个，现在一个都没有）**
+  - **原文说「补 `burdenScore` 的权重分支」，这一点做法上不对。** 6.2 写的「少换乘：`transfers`、`walk_m`、`duration_min` 依次升序」是**字典序**，加权和实现不出来 —— 任何权重下第二项都能翻盘第一项。已改为 `PROFILE_ORDER`（`accessibility.ts:29`）声明逐项比较的键序，`sortedRoutes` 命中该表时走字典序，未命中（`standard` / `luggage` / `slow`）仍走 `burdenScore` 加权和。
+  - `burdenScore` 仍给两个新画像补了明确权重。它是导出函数，卡片与解释文案都可能拿它算分差；若让新画像静默落到 `standard` 权重，调用方拿到的分数会与实际排序不一致。
+  - `TravelProfile` 由 3 项扩到 5 项（新增 `fewTransfers` / `lowWalk`）。UI 无需改动：`+page.svelte:117` 的 `Select` 直接吃 `PROFILE_OPTIONS`，`planner.svelte.ts:163` 的 `routes` getter 走 `sortedRoutes`，新画像自动出现在下拉并即时重排。
+  - `burdenReason` 为两个新画像给了专属文案（`换乘 N 次，总步行 M 米` / `总步行 M 米，最长单段 N 米`）。原来的「请确认换乘通道」与它们的排序依据无关，直接复用等于文案与排序脱节，判据的「文案可见变化」就形同虚设。
+  - **真实 fixture 单独证不了字典序**：三条候选换乘全是 1，加权和也能凑出同样次序。补了两条构造样本让两项给出相反结论（换乘 2 / 步行 100 对换乘 0 / 步行 2700），`fewTransfers` 与 `lowWalk` 各选中相反的一条。
+  - **变异验证时发现一个测试缺口并补上**：把比较器改成第一项就 `return diff`（丢掉后续 tie-break），15 条测试一开始**全过** —— 因为 `diff` 为 0 时 V8 稳定排序保留原序，而原序恰好是期望序。补了一条「第一项打平、故意把步行多的放在前面」的样本后，该变异被抓到。另一种变异（清空 `PROFILE_ORDER` 使其退化成加权和）本来就能抓到。
+  - 实测：前端 `68 passed`（原 56 + M2-1 的 6 + M2-2 的 6），svelte-check `351 files 0 errors`。
+- [x] **M2-3 决策标签（6 个，现在一个都没有）**（2026-09-24 完成，实测修正了原文一处触发条件）
   - `RouteCard.svelte` 现在只渲染“地铁”“公交”两个模式徽标（`:49`、`:52`）与线路名链。4.2 那六个**决策**标签（低步行、少换乘、直达优先、时间最短、长步行提醒、多换乘提醒）一个都还没有。
   - 前四个是**候选集内的相对判断**（“在候选中最低”），必须在拿到整组路线之后算，不能在单个卡片里算。算的地方是 `accessibility.ts`（它已经能看到整个数组），由 `RouteCard` 接收结果，而不是自己判断。
   - 后两个是绝对阈值判断，可以在卡片内算。
   - 判据：同一组候选里，“低步行”“时间最短”各只出现在一张卡片上（相对标签不能同时贴给两条路线，除非真的同分）。
-- [ ] **M2-4 阈值挪进设置**
+  - 入口是 `decisionLabels(routes, thresholds)`（`accessibility.ts:64`），返回 `Record<路线 id, DecisionLabel[]>`。`+page.svelte:49` 对整组候选算一次，按 id 发给每张 `RouteCard`（新增可选 `labels` prop）。卡片自己不做任何相对判断 —— 它看不到其他候选。
+  - **原文「低步行」的触发条件写的是「总步行*或*最长单段步行在候选中最低」，这个「或」与判据直接冲突。** 两项的最低值经常落在不同路线上，那就会贴出两个「步行负担最低」，而判据要求它只出现在一张卡片上。已按判据取单一胜者：总步行为主、最长单段做 tie-break。
+  - **反过来，「少换乘」不能加 tie-break。** 原文触发条件是「乘车线路变更次数最低」，换乘数打平的候选本就该一起拿到。真实百度候选正是这个形状（三条换乘全是 1），一开始给它加了总步行 tie-break，SSR 渲染出来只有一条有标签，与原文不符 —— 已去掉。判据点名要求唯一的只有「低步行」与「时间最短」。
+  - 「直达优先」用 `transfers === 0` 判定，不是数乘车分段数：同一条线被切成多段时分段数大于 1，但那仍是全程单线，标签不该丢。原文「全程单条线路或无公共交通换乘」两种说法都被这一个条件覆盖。
+  - 两个提醒标签的阈值由参数传入（`LabelThresholds`，默认 500 米 / 2 次换乘），不读全局 —— 4.2 末尾要求阈值可配置，由调用方决定从哪里取。阈值用严格大于：等于 500 米不算「较长步行」。
+  - **UI 可见性是单独验证的**，`decisionLabels` 的单测过了不等于标签渲染出来了。仓库没有组件测试的先例，也没有 jsdom / testing-library，不为一条判据引入依赖；改用一次性脚本把 `RouteCard` 编成 SSR 渲染成 HTML 字符串。实测三条真实候选：`r0 = [步行负担最低 | 换乘次数最少 | 预计最快到达 | 含较长步行]`，`r1 / r2 = [换乘次数最少 | 含较长步行]`；把阈值收紧到 200 米 / 0 次换乘后 `r0` 多出「换乘较多」，证明阈值参数一路传到了 UI。脚本用完即删。
+    - 走 Vite 的 `ssrLoadModule` 这条路**行不通**，别再试：它产出的是 dev 构建，带 `push_element` 插桩，需要完整组件上下文，单独加载直接 `Cannot read properties of null (reading 'function')`；`mode: "production"` 也压不掉。可行做法是直接调 `svelte/compiler` 的 `generate: "server"` + `dev: false`，`.ts` 依赖交给 Node 24 原生类型剥离（仓库里没有 esbuild，Vite 7 用的是 rolldown/oxc）。
+  - 这 9 条测试做过变异验证，7 种改坏**全部**被抓到：低步行丢主键、直达改成数分段数、两个阈值改成 `>=`、阈值参数被忽略、相对标签贴给所有候选、给少换乘加 tie-break。
+  - 实测：前端 `77 passed`（M2-3 新增 9 条），svelte-check `351 files 0 errors`，eslint 0 问题。
+- [x] **M2-4 阈值挪进设置**（2026-09-24 完成，实测推翻了原文指定的落点）
   - `RouteCard.svelte:42` 现在把 500 米写死在模板的 `{#if}` 里。4.2 末尾那句“阈值必须进入设置或策略配置，不应写死在 UI”说的就是这一处。
   - 挪进 `Settings`（`config.rs:19` 定义，`Config` 在 `:57` 持有它），前端从已有的设置状态读；默认值保持 500 米与 2 次换乘，行为不变。加字段记得同步 `impl Default`（`config.rs:35`）。
-- [ ] **M2-5 守住诚信边界**
+  - **原文说「挪进 `Settings`（`config.rs:19`）」，落点错了。** 那个结构体是喂给算路的，
+    而这两个阈值只决定标签显不显示，不参与算路与评分。`SettingsDto.show_logs`
+    的注释（`credentials/mod.rs:92-93`）已经立过这个判例：界面开关不进
+    `route_core::config::Settings`，否则「改了显示偏好」看起来像「改了算路配置」。
+    照判例只加进 `SettingsDto`：`long_walk_meters` / `many_transfers`（`mod.rs:95-102`），
+    默认值常量 `DEFAULT_LONG_WALK_METERS` / `DEFAULT_MANY_TRANSFERS` 放在同一文件（`:76-80`）。
+  - **写死的 500 不止原文点名的那一处，共四处**：`RouteCard.svelte:42` 的模板 `{#if}`、
+    `+page.svelte:128` 推荐段的文案、`accessibility.ts` 里 `burdenReason` 的 `>= 500`。
+    只改前一处会让「改了阈值，标签动了、解释文案不动」。第四处 `burdenScore` 里的
+    `transfers * 500` **不是阈值**，是把换乘次数折算成米的量纲系数，没动。
+  - `burdenReason` 增加第三个参数 `thresholds`，默认 `DEFAULT_LABEL_THRESHOLDS`，
+    所以既有调用点不必全改。`RouteCard` 增加可选 `thresholds` prop，由 `+page.svelte`
+    从 `providers.settings` 读一次统一传下去；偏好未加载完时回落到同一组默认值。
+  - **`Input` 组件不支持 `onchange` 与 `min`，`value` 只收 string。** 在调用侧适配
+    （`String(...)` + `onblur`），没有去改这个共享组件。用 `onblur` 而不是 `oninput`：
+    输入「80」的中途 `oninput` 会先存一个 `8`。非数字与负数由 `thresholdOf` 挡掉回落默认值
+    —— 存进 `NaN` 的后果是所有阈值比较恒为 false，提醒标签从此永不出现且界面无异常。
+  - 新增 2 条测试，都做过变异验证：把 `burdenReason` 改回写死 500（抓到）、
+    把 Rust 侧默认值改成 800 制造前后端分叉（抓到）。后一条照 `out_crs`
+    那处「三处默认值不许分叉」的做法，从 Rust 源码里读真值来比。
+  - UI 侧证据取自 `svelte/compiler` 的 SSR 产物：写死的 `longestWalk >= 500` **0 处**，
+    实际渲染的是 `longestWalk >= thresholds.longWalkMeters` 与 `burdenReason(route, profile, thresholds)`。
+  - 实测：前端 `79 passed`（M2-4 新增 2 条），shell 40 / core 64 / CLI 12，
+    svelte-check `351 files 0 errors`，clippy 与 eslint 0 问题。默认值仍是 500 米 / 2 次，行为不变。
+- [x] **M2-5 守住诚信边界**（2026-09-24 完成，实测发现原文判据漏掉了一处越界）
   - `RouteCard.svelte:43` 已有“设施无障碍信息待确认”。按 6.3：没接入电梯/坡道/施工数据前，文案只说“低步行/少换乘建议”，**不承诺“全程无障碍”**。
   - 判据：六个标签各能在一个真实场景里出现一次；`grep -rn "无障碍" src/lib/components src/routes` 的每一处命中都不是承诺性说法。
+  - 界面上 `无障碍` 只有一处命中（`RouteCard.svelte:62` 的「设施无障碍信息待确认」），
+    本来就合规；另两处命中在代码注释里，不面向用户。这条判据当场就过了。
+  - **原文判据只盯 `无障碍` 这个词，漏掉了画像名。** 「老人 / 行动缓慢」暗示应用
+    懂行动能力，而 `burdenScore` 的 `slow` 权重只调了步行距离、最长单段与换乘次数
+    （`accessibility.ts:133-134`），电梯、台阶、坡道、路缘**一个字段都没有**。
+    按那个名字选路的人会以为结果考虑过台阶。已改成 `少走长段` —— 只说它真在做的事。
+  - 「出行画像」下拉框旁边补了依据说明（`+page.svelte:128`）：「依据仅为步行距离与
+    换乘次数；电梯、坡道、台阶等设施信息尚未接入」。沉默会被读成「设施没问题」，
+    而 §7 的界面清单（本文 `:621`）本来就要求「不要把它藏在一个无说明的下拉框里」。
+  - **六个标签在真实百度数据上全部出现过**，两个新场景是为补齐缺的两个标签取的：
+    - 直达（王府井 → 东单，纯公交 0 换乘）：`[步行负担最低 | 换乘次数最少 | 路线更直接 | 预计最快到达]`
+      与 `[换乘次数最少 | 路线更直接 | 含较长步行]`。
+    - 多换乘（回龙观 → 亦庄，3 次换乘）：`[含较长步行 | 换乘较多]`、`[步行负担最低 | 含较长步行 | 换乘较多]`。
+    - **纯公交方案必须用 `TravelMode::Bus` 取**：`transit` 的本地筛（`baidu.rs:389`）
+      在 Subway 模式下会把它全筛掉，第一次用 Subway 取直达场景得到 0 条 —— 那是正确行为，不是 bug。
+    - 两份响应经真实 `transit()` 归一化后存成 fixture（`baidu-transit-direct.json` /
+      `baidu-transit-many-transfers.json`，折线点已裁到 1 个，判据用不到）。
+  - 新增 3 条测试，四种改坏全部被抓到：画像名改回「老人 / 行动缓慢」、卡片文案改成
+    「全程无障碍」、删掉「路线更直接」标签、把直达判定换成数乘车分段数。
+  - 实测：前端 `82 passed`（M2-5 新增 3 条），shell 40 / core 64 / CLI 12，
+    svelte-check `353 files 0 errors`，clippy 与 eslint 0 问题。
 
 ### M3 展示完整度
 
@@ -492,7 +585,7 @@ src/routes/+page.svelte                  # 已有出行画像选择器（PROFILE
 
 | 风险 | 影响 | 处理 |
 | --- | --- | --- |
-| 百度 AK 类型或白名单配置不正确 | 地图或 Web 服务不可用 | 把 JS API GL AK 与 Web 服务 AK 分开配置；Demo 前用固定场景实测 |
+| 百度 AK 未开通对应服务或白名单不对 | 地图白屏或 Web 服务不可用 | 实测同一个 AK 可兼顾两侧（见 M1-1），所以默认单字段；启动时各打一次最小请求探活，浏览器侧看 `getscript` 的 `unauth`，服务侧看 `status` 与数字码（240 未开通 / 302 配额用尽 / 210 Referer 不通过） |
 | 地图 SDK 外部资源加载失败 | 地图白屏 | 发布前在安装包环境验证；提供明确错误提示与日志路径 |
 | 公交路线分段字段存在城市差异 | 详情展示不完整 | Adapter 使用 Option/默认值，保留原始错误日志；固定演示城市回归测试 |
 | 无障碍数据不完整 | 误导用户 | 首期明确为“低步行/少换乘建议”，设施未知时提示用户确认 |
@@ -543,14 +636,14 @@ src/routes/+page.svelte                  # 已有出行画像选择器（PROFILE
 | 品牌 | `AutoBee 安心出行` + 一句副标题“少走一点，安心一点” | 不显示“路线规划”这类通用工具名 |
 | 一级模式 | `安心换乘`、`15 分钟生活圈` | 切换时保留当前地点；地图和左侧面板按模式换内容 |
 | 数据标识 | `百度地图驱动` | 打开“使用了哪些百度服务”的抽屉，录屏时可展示 |
-| 设置 | 百度 Web 服务 AK、百度 JS API GL AK、画像阈值、日志目录 | 保留现有加密存储能力 |
+| 设置 | 百度 AK（一个，服务端与 JS API GL 共用）、画像阈值、日志目录 | 保留现有加密存储能力 |
 
 ### 模式一：安心换乘
 
 #### 左侧面板优先级
 
 1. **起点、终点**：地点输入提示；选中后锁定 POI 坐标。
-2. **谁在出行**：普通出行、行李/婴儿车、老人/行动缓慢；不要把它藏在一个无说明的下拉框里。
+2. **谁在出行**：普通出行、行李/婴儿车、少走长段；不要把它藏在一个无说明的下拉框里(M2-5 已在选择器下方写明判断依据)。
 3. **本次目标**：时间最短、低步行、少换乘。
 4. **推荐结论卡**：置于所有路线卡前面。
 5. **候选路线卡**：显示差异，不只是时长与距离。

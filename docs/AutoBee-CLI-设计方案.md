@@ -349,56 +349,80 @@ autobee-cli --help                                        # 期望 exit 0
 
 ### C2 参数解析 + `route`
 
-- [ ] **C2-1 建 `autobee-cli` crate**
+- [x] **C2-1 建 `autobee-cli` crate**
   - 新建 `src-tauri/cli/Cargo.toml`:`name = "autobee-cli"`、`edition = "2024"`,依赖 `route-core`(path `../core`)、`autobee-shell`(path `../shell`)、`serde_json`、`tracing`、`tracing-subscriber`。**不依赖 `tauri`**。
   - `members` 加 `"cli"`。
   - `src-tauri/cli/src/main.rs` 顶部放 `#![cfg_attr(not(debug_assertions), windows_subsystem = "console")]` —— 不写默认就是 console,但显式写出来是为了挡住「照抄 GUI 的 `windows_subsystem = "windows"`」这个手滑,那会让 CLI 一个字都不输出(3.1 约束一)。
-  - 判据:`cargo build -p autobee-cli` 通过,`cargo tree -p autobee-cli | grep -c "^tauri"` 为 0。
-- [ ] **C2-2 写 `args.rs` 的分词器**
+  - 判据:`cargo build -p autobee-cli` 通过,`cargo tree -p autobee-cli | grep -c "^tauri"` 为 0。已完成:构建 0 warning,依赖树 130 个 crate 里**没有一个 crate 名含 `tauri`**。
+  - **判据本身有个坑**:裸 `grep tauri` 会有 4 行命中,那是路径里的目录名 `src-tauri`,不是依赖。必须像判据写的那样用行首锚定 `^tauri`,否则会误判成「依赖了 tauri」。
+- [x] **C2-2 写 `args.rs` 的分词器**
   - 签名 `pub fn parse(argv: &[String]) -> Result<Command, AppError>`,纯函数,不读 env、不读磁盘 —— 这样 8.1 的单测才能直接喂数组。
   - `enum Command { Route{…}, Suggest{…}, Circle{…}, Help, Version }`。
   - 守住 6.4 的五条:`--flag value` 与 `--flag=value` 都认;`--` 之后不当 flag;未知 flag 报错;重复 flag 报错;`Help` / `Version` 不是错误分支。
   - 缺必填参数时 message 里带上缺的那个 flag 名(8.1 第五行)。
-  - 判据:`mod tests` 里 8.1 表格的前六行各一个测试,`cargo test -p autobee-cli` 全绿。
-- [ ] **C2-3 枚举值从 `ALL` 打印**
+  - 判据:`mod tests` 里 8.1 表格的前六行各一个测试,`cargo test -p autobee-cli` 全绿。已完成:8.1 八行**各有一条对应测试**(前六行 = `args.rs` 的 411/427/439/450/461/473 行),`cargo test -p autobee-cli` 16 passed。
+- [x] **C2-3 枚举值从 `ALL` 打印**
   - `--mode` / `--sort` / `--out-crs` / `--package` 分别用 `TravelMode::parse` / `SortBy::parse` / `Crs::parse` / `LifeCirclePackage::parse`;失败时 message 由 `TravelMode::ALL` 等**拼出来**,不写字面量列表。
   - `--help` 的合法值同样从 `ALL` 拼。
-  - 判据:`grep -n '"subway"\|"walking"\|"driving"' src-tauri/cli/src/` 在 `args.rs` 里零命中(只许出现在 `route-core`)。
-- [ ] **C2-4 exit code 映射**
+  - 判据:`grep -n '"subway"\|"walking"\|"driving"' src-tauri/cli/src/` 在 `args.rs` 里零命中(只许出现在 `route-core`)。已完成:`args.rs` / `run.rs` / `output.rs` / `main.rs` 四个文件的**生产代码段零命中**。
+  - **判据需要按意图读,不能按字面读**:`mod tests` 里有 `"walking"` / `"bus"`,那是喂给 `parse` 的**输入串**,不是合法值列表。测试必须写具体输入,否则它没在测任何东西。判据真正约束的是「报错与 help 的合法值列表不许抄一份」。
+  - `lower()` 用 `Debug` 派生名转小写而不是手写 match:手写那份会在加枚举值时被忘掉,而 `Debug` 是编译器生成的。
+- [x] **C2-4 exit code 映射**
   - `fn exit_code(code: &str) -> i32`,按 5.3 的表。
   - `BAIDU_KEY_REQUIRED` 归 `4`:它与 `NO_PROVIDER` 是同一类「去设置页填东西」,5.3 的表已经把两者并列在同一档,照表实现即可,别让两个同类错误落到不同档。
-  - 判据:8.1 第七行的测试,含 `NO_PROVIDER` → `4`、`BAIDU_KEY_REQUIRED` → `4`、`NETWORK` → `5`。
-- [ ] **C2-5 接上 `route`**
+  - 判据:8.1 第七行的测试,含 `NO_PROVIDER` → `4`、`BAIDU_KEY_REQUIRED` → `4`、`NETWORK` → `5`。已完成:`args.rs:499` 的 `错误码映射到分档_exit_code`,三条都在,另含 `SOMETHING_NEW` → `1` —— 没列过的码落兜底档而不是 0,否则脚本会把未知错误当成功。
+- [x] **C2-5 接上 `route`**
   - `autobee_shell::credentials::resolve::load_config()` → `route_core::planner::plan_route(&config, &RouteQuery{…})` → `convert_plan` 到 `--out-crs`。
   - 输出层:`--json` 打 `serde_json::to_string(&plan)` 到 stdout;否则打对齐文本表格。`plan.degraded` 走 stderr 且**留在 JSON 里**(5.2)。
   - `tracing_subscriber` 的 writer 设成 stderr —— 默认是 stdout,不改就会把日志混进 `--json` 的输出里,5.2 那条管道契约当场破。
-  - 判据:8.3 前三条冒烟通过,其中 `--mode transit` 给出 exit 2 且 stderr 里能看到合法值列表。
+  - 判据:8.3 前三条冒烟通过,其中 `--mode transit` 给出 exit 2 且 stderr 里能看到合法值列表。已完成,实测(南京南站 → 新街口,百度 AK):
+    - 第一条:exit 0,5 条方案,stderr 空。
+    - 第二条:`--json | jq -e -f` 输出 `true`、exit 0 —— stdout 是干净可解析 JSON 且方案非空。
+    - 第三条:exit 2,stderr 为 `BAD_MODE: --mode 不认识的值「transit」,可选:subway / bus / walking`,stdout 空。
+  - **验收时发现并修掉两个真 bug:**
+    - `degraded` 原本被拼进 stdout 的文本里,违反 5.2。已抽成 `output::degraded_note`,由 `run::report` 的新增 `note` 参数在**两条路径**上都打到 stderr,同时保留在 JSON 的 `degraded` 字段里(人看 stderr、脚本读字段)。
+    - **`Route.duration` 的单位是分钟,不是秒**(`models.rs:304`)。摘要行原本又套了一层 `秒 → 分钟`,于是 29 分钟的地铁方案显示成「1 分钟」—— 不 panic、不报错,只是把数字说错。已把那个 helper 改名为 `sec_to_minutes`(名字带单位才防复发),它现在只用于 `walk_duration_sec`。
+  - 三条新测试钉住以上两点,并都做了变异验证(把实现改坏确认测试真会红):`降级说明不进_stdout_文本`、`降级说明走_stderr_那一路`、`降级说明留在_json_里`、`方案耗时按分钟显示不再除一次六十`。
+  - **`--json` 用的是 `to_string_pretty` 而不是 `to_string`**:管道里两者都合法,人直接看时可读性差别很大。
+  - 冒烟要灌 Key 才能跑:CLI 按设计不写配置(4.1),验收时用一个走 `Store::save` 的一次性 example 灌进 `settings.db`(与设置页同一条 DPAPI 路径,直接写 SQL 明文的话 CLI 读不出来),跑完即删。
 
 ### C3 `suggest` + `circle`
 
-- [ ] **C3-1 `suggest`**
+- [x] **C3-1 `suggest`**
   - 走 `route_core::planner::suggest_places(&config, keyword, page_size)`,`page_size` 默认 10。它返回 `Vec<Place>` 而不是 `Result` —— 空结果不是错误,按 exit 0 输出空表/空 JSON 数组。
-  - 判据:`autobee-cli suggest --keyword 孝陵卫` 有输出且 exit 0。
-- [ ] **C3-2 `circle`**
+  - 判据:`autobee-cli suggest --keyword 孝陵卫` 有输出且 exit 0。已完成:10 条结果、exit 0、stderr 空。
+  - **文档没写但实现里有、且必须有的一条**:`suggest_places` 返回的坐标是**各家自己的原生坐标系**(高德/腾讯 GCJ02、百度 BD09、天地图 CGCS2000),它不做换算。GUI 那边不换没事,因为它只把点画在同样是 GCJ02 的底图上;CLI 的调用方拿到坐标要自己用,不统一就会偏几百米。`run.rs:86-90` 按 `get_meta(provider).coord_sys` 逐条换到 `--out-crs`。
+  - 另一条:`suggest_places` 返回裸 `Vec`,拿不到「为什么空」。一个 Key 都没配时它也返回空 —— 那种情况必须报 `NO_PROVIDER` 而不是装作搜不到,否则人会一直换关键词。判断用 `registry::default_chain(&config).is_empty()` 而不是自己数 `config.keys`:候选链还受 disabled 与 `default_providers` 影响,自己数会与 planner 真正走的链路不一致。
+- [x] **C3-2 `circle`**
   - `--at` 用 `route_core::decode::parse_lat_lng`(`core/src/decode.rs:44`),**不自己写**坐标文本解析。
   - 抄 `commands.rs:312-340` 的流程:`config.key(ProviderId::Baidu)` 取 AK(缺则 `BAIDU_KEY_REQUIRED`)→ 入参转 `Crs::Bd09` → `life_circle::life_circle(key, origin, package)` → 把每个 `poi.location` 转回 `--out-crs`,并置 `circle.crs`。
   - 那两次坐标系转换不是可选的:`life_circle` 只认 BD09,漏掉回转会让 POI 在图上整体偏出几百米,而返回值看着完全正常。
-  - 判据:8.3 第五条冒烟通过;未填 AK 时 exit 4 且 stderr 提示去设置页。
+  - 判据:8.3 第五条冒烟通过;未填 AK 时 exit 4 且 stderr 提示去设置页。已完成:
+    - `--at 32.0603,118.7969 --package care` → 4 个可达点、exit 0、输出头标「坐标系 Gcj02」(已从 BD09 转回)。
+    - 只清掉百度 AK、留着高德时 → exit 4,stderr 为 `BAIDU_KEY_REQUIRED: 请到设置页填写百度地图 Web 服务 AK`,stdout 空。
+  - **验这条要留着另一家的 Key。** 把整个 `settings.db` 清空的话走的是 `NO_PROVIDER`(一个 Key 都没配),那是另一条分支 —— 两者都是 exit 4,光看退出码分不出来,必须核对 `code`。
+  - 顺带印证了 C2-5 那条 writer 设置:`tracing` 的 WARN 行确实落在 stderr,stdout 全空。
 
 ### C4 进构建管线
 
-- [ ] **C4-1 编译进 release**
+- [x] **C4-1 编译进 release**
   - `scripts/build-app.bat` 的 `[4/6]`(`tauri build`,现 124 行附近)之后加一步 `cargo build --release -p autobee-cli`,失败即 `goto fail`。
-  - 判据:`pnpm build:app` 跑到这一步不中断,`src-tauri\target\release\autobee-cli.exe` 存在。
-- [ ] **C4-2 收进 `dist\`**
+  - 判据:`pnpm build:app` 跑到这一步不中断,`src-tauri\target\release\autobee-cli.exe` 存在。已完成:整条 `build-app.bat` 跑通(122 秒),CLI 3.3 MB、GUI 6.0 MB,NSIS 安装包与 portable zip 都产出了。
+  - 调用的是 `%ROOT%scripts\cargo-msvc.bat` 而不是裸 `cargo`:裸 `cargo` 会被 Git 自带的 coreutils `link.exe` 遮蔽 MSVC 链接器而链接失败。
+- [x] **C4-2 收进 `dist\`**
   - `[5/6]` 收集时把 `autobee-cli.exe` 一并拷进 `%DIST%`,与 `AutoBee.exe` 并列。
-  - 判据:`dir /b "%DIST%\*.exe"` 列出两个 exe;portable zip 里也有两个。
-- [ ] **C4-3 确认质量门不用改**
+  - 判据:`dir /b "%DIST%\*.exe"` 列出两个 exe;portable zip 里也有两个。已完成:两者都在,zip 里是 `AutoBee/autobee-cli.exe` 与 `AutoBee/AutoBee.exe`。
+  - **验这条时发现一个真缺陷并修掉了:portable zip 把 `data\settings.db` 一起打进去了。** `[5/6]` 原本只往 `%DIST%` 里拷、从不清空,而运行期数据按设计就落在 exe 同目录的 `data\`(`shell\src\paths.rs`)—— 在本机跑过一次打包产物,`%DIST%\data` 就有了档案库和日志,`Compress-Archive` 打整个目录,于是**本机的凭据库进了分发包**。DPAPI 按账户绑定使得那份 Key 在别人机器上解不开,但分发一个凭据文件本身就不对。修法:`[5/6]` 开头 `rd /s /q "%DIST%"` 先清空载荷目录。
+- [x] **C4-3 确认质量门不用改**
   - `[3/6]` 的 `pnpm verify` 不需要动:`test:rust` 已是 `--workspace`,`clippy` 已是 `--workspace --all-targets`,新 crate 自动进门。
-  - 判据:`pnpm verify` 的输出里出现 `autobee-cli` 的测试行(证明它真进了门,而不是被跳过)。
-- [ ] **C4-4 冒烟**
+  - 判据:`pnpm verify` 的输出里出现 `autobee-cli` 的测试行(证明它真进了门,而不是被跳过)。已完成:输出里有 `autobee_cli-<hash>.exe ... 16 passed`。全门实测:前端 82、CLI 16、shell 42、core 64,svelte-check 353 文件 0 错 0 警,clippy 与 eslint 0 问题,fmt 干净。
+- [x] **C4-4 冒烟**
   - 在 `dist\` 里用 cmd 直接跑 8.3 那六条。
-  - 判据:六条全过。这一条就是 3.1 约束一的回归 —— 只有在打包产物上跑才算。
+  - 判据:六条全过。这一条就是 3.1 约束一的回归 —— 只有在打包产物上跑才算。已完成,在 `dist\AutoBee` 里对 release exe 实测:route 文本 `0`、`--json | jq -e` 输出 `true` 且 `0`、`--mode transit` → `2`、suggest `0`、circle `0`、`--help` `0`。
+  - 另落了一个可重跑的脚本 `scripts/smoke-cli.mjs`(`pnpm smoke:cli`),默认对着 `dist\AutoBee` 跑,14 项检查。
+  - **它是 `.mjs` 而不是 `.bat`,原因是硬的**:判据里的地名是中文,而 `.bat` 必须保持纯 ASCII(cmd.exe 按 OEM 代码页读文件,行内 UTF-8 中文会破坏解析)。中文放进 Node 的参数数组由 `spawnSync` 直接传,绕开整个代码页问题。
+  - 脚本在没配 Key 时把算路那几条报 **SKIP 而不是 PASS**:全新安装的档案库是空的,把「没验」记成「通过」会让这条判据失去意义。空载荷实测 8 项通过、6 项 SKIP。
+  - 那 8 项里有一条专门盯 3.1 约束一:`--help` 不只要 exit 0,还要真打出 200 字节以上的用法。exit 0 却一个字不输出正是 `windows_subsystem` 写错时的表现,而它**只在 release 生效** —— debug 全绿而 release 静默是可能的,所以必须对打包产物跑。
 
 ## 10. 风险与规避
 

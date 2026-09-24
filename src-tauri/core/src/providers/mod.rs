@@ -7,6 +7,7 @@
 //! 的字段** —— 出现一次，前端就得为这家写一次分支，抽象层就白做了。
 
 pub mod amap;
+pub mod baidu;
 pub mod photon;
 pub mod tencent;
 

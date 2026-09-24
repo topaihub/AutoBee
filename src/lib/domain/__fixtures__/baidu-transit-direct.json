@@ -1,0 +1,160 @@
+[
+  {
+    "id": "r0",
+    "distance": 1671,
+    "duration": 24,
+    "price": 2,
+    "bounds": [
+      {
+        "lat": 39.908623368989,
+        "lng": 116.41088101797
+      },
+      {
+        "lat": 39.914309931999,
+        "lng": 116.41963949669
+      }
+    ],
+    "segments": [
+      {
+        "kind": "walk",
+        "distance": 411,
+        "duration": 6,
+        "points": [
+          {
+            "lat": 39.909695689174,
+            "lng": 116.41088101797
+          }
+        ],
+        "instruction": [
+          "步行411米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 1068,
+        "duration": 6,
+        "points": [
+          {
+            "lat": 39.90952273545,
+            "lng": 116.41343220562
+          }
+        ],
+        "line": {
+          "vehicle": "BUS",
+          "title": "41路",
+          "stationCount": 1,
+          "color": "#2ba471",
+          "getOn": {
+            "title": "正义路南口站",
+            "location": {
+              "lat": 39.90952273545,
+              "lng": 116.41343220562
+            }
+          },
+          "getOff": {
+            "title": "王府井站",
+            "location": {
+              "lat": 39.914309931999,
+              "lng": 116.41963949669
+            }
+          },
+          "firstTime": "05:10",
+          "lastTime": "22:45"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 192,
+        "duration": 3,
+        "points": [
+          {
+            "lat": 39.914309931999,
+            "lng": 116.41963051364
+          }
+        ],
+        "instruction": [
+          "步行192米"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "r1",
+    "distance": 2652,
+    "duration": 38,
+    "price": 2,
+    "bounds": [
+      {
+        "lat": 39.906845355656,
+        "lng": 116.41046779744
+      },
+      {
+        "lat": 39.916357531587,
+        "lng": 116.41847169953
+      }
+    ],
+    "segments": [
+      {
+        "kind": "walk",
+        "distance": 569,
+        "duration": 9,
+        "points": [
+          {
+            "lat": 39.909695689174,
+            "lng": 116.41088101797
+          }
+        ],
+        "instruction": [
+          "步行569米"
+        ]
+      },
+      {
+        "kind": "transit",
+        "distance": 1680,
+        "duration": 14,
+        "points": [
+          {
+            "lat": 39.906990642537,
+            "lng": 116.41064745854
+          }
+        ],
+        "line": {
+          "vehicle": "BUS",
+          "title": "141路",
+          "stationCount": 1,
+          "color": "#2ba471",
+          "getOn": {
+            "title": "正义路站",
+            "location": {
+              "lat": 39.906990642537,
+              "lng": 116.41064745854
+            }
+          },
+          "getOff": {
+            "title": "王府井路口北站",
+            "location": {
+              "lat": 39.916357531587,
+              "lng": 116.41792373317
+            }
+          },
+          "firstTime": "05:30",
+          "lastTime": "22:30"
+        }
+      },
+      {
+        "kind": "walk",
+        "distance": 403,
+        "duration": 6,
+        "points": [
+          {
+            "lat": 39.916350614125,
+            "lng": 116.41792373317
+          }
+        ],
+        "instruction": [
+          "步行403米"
+        ]
+      }
+    ]
+  }
+]

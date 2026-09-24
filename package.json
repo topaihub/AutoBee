@@ -20,6 +20,8 @@
     "fmt:rust:fix": "scripts\\cargo-msvc.bat fmt --all",
     "dev:app": "scripts\\dev.bat",
     "build:app": "scripts\\build-app.bat",
+  "//smoke:cli": "跑在打包产物上,不是 cargo run:§3.1 约束一是「exe 真的往控制台打字」,而 windows_subsystem 只在 release 生效,debug 能过而 release 静默是可能的。没配 Key 时算路那几条会 SKIP 而不是 FAIL。",
+  "smoke:cli": "node scripts/smoke-cli.mjs",
     "verify": "pnpm run check && pnpm run lint && pnpm run test && pnpm run test:rust && pnpm run clippy && pnpm run fmt:rust",
     "tauri": "tauri"
   },

@@ -9,6 +9,7 @@
    */
   import { providers } from "$lib/state/providers.svelte";
   import type { Crs, MapProviderInput, ProviderId } from "$lib/ipc/types";
+  import { DEFAULT_LABEL_THRESHOLDS } from "$lib/domain/accessibility";
   import Dialog from "$lib/components/ui/dialog/Dialog.svelte";
   import Button from "$lib/components/ui/button/Button.svelte";
   import Input from "$lib/components/ui/input/Input.svelte";
@@ -70,6 +71,15 @@
   function updateSettings(patch: Partial<NonNullable<typeof providers.settings>>) {
     if (!providers.settings) return;
     void providers.saveSettings({ ...providers.settings, ...patch });
+  }
+
+  /**
+   * 数字框读数。空串、负数、非数字都退回默认值 —— 存进去一个 `NaN` 会让
+   * 每个阈值比较都变成 false，提醒标签从此永远不出现，而且界面上看不出异常。
+   */
+  function thresholdOf(e: Event & { currentTarget: HTMLInputElement }, fallback: number): number {
+    const n = Number(e.currentTarget.value);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
   }
 
   const crsOptions: Array<{ value: Crs; label: string }> = [
@@ -219,6 +229,29 @@
             value={providers.settings.tileSource}
             onchange={(e) => updateSettings({ tileSource: e.currentTarget.value })}
           />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="space-y-1.5">
+          <Label for="long-walk">长步行提醒阈值（米）</Label>
+          <!-- 落焦时才存：`oninput` 会在输入「80」的中途先存一个 8。 -->
+          <Input
+            id="long-walk"
+            type="number"
+            value={String(providers.settings.longWalkMeters)}
+            onblur={(e) => updateSettings({ longWalkMeters: thresholdOf(e, DEFAULT_LABEL_THRESHOLDS.longWalkMeters) })}
+          />
+          <p class="text-[11px] text-muted-foreground">最长单段步行超过它就提醒，默认 500 米。</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label for="many-transfers">多换乘提醒阈值（次）</Label>
+          <Input
+            id="many-transfers"
+            type="number"
+            value={String(providers.settings.manyTransfers)}
+            onblur={(e) => updateSettings({ manyTransfers: thresholdOf(e, DEFAULT_LABEL_THRESHOLDS.manyTransfers) })}
+          />
+          <p class="text-[11px] text-muted-foreground">换乘次数超过它才提醒，默认 2 次。</p>
         </div>
       </div>
     {/if}
