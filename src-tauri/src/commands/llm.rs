@@ -385,18 +385,31 @@ fn run_stream(
         mcp: &mut mcp,
     };
 
-    let mut route_snapshot: Option<RoutePlan> = None;
     let mut sink = |event: AgentEvent| {
-        // 完整折线只在 tool 事件里存在；独立快照保存，绝不能塞进模型上下文摘要。
+        // 完整折线只在 tool 事件里存在；收到成功路线就立即独立保存，不能等整轮
+        // 最终回答。用户可能在模型总结时关闭窗口，但地图已经显示过，快照仍应可恢复。
         if let AgentEvent::ToolEnd {
             payload: Some(ToolPayload::Plan(plan)),
+            ok: true,
             ..
         } = &event
         {
-            route_snapshot = Some((**plan).clone());
+            match Store::open().and_then(|store| {
+                conversations::save_route_snapshot(store.conn(), &prepared.conv_id, plan)
+            }) {
+                Ok(()) => tracing::info!(
+                    conversation = %prepared.conv_id,
+                    "路线地图快照已保存"
+                ),
+                Err(error) => tracing::error!(
+                    %error,
+                    conversation = %prepared.conv_id,
+                    "路线地图快照保存失败，重启后无法恢复该地图"
+                ),
+            }
         }
         // `Done` 不在这里发：它要带落库后的消息，而落库发生在 `run_turn_streaming`
-        // 返回之后。在这里转发会让前端先收到 `done` 再收到消息。
+        // 返回之后。在这里转发会让前端先收到 `done` 再收到内容。
         if let Some(payload) = to_stream_event(event) {
             emit(app, stream_id, &payload);
         }
@@ -406,14 +419,6 @@ fn run_stream(
     let payload = match outcome {
         Ok(turn) => match persist_turn(&prepared.conv_id, &turn.appended, &model.model) {
             Ok(messages) => {
-                if let Some(plan) = route_snapshot
-                    && let Err(error) = Store::open().and_then(|store| {
-                        conversations::save_route_snapshot(store.conn(), &prepared.conv_id, &plan)
-                    })
-                {
-                    // 快照仅用于重启后重绘地图；回答与消息已成功落库，不能因此向用户报失败。
-                    tracing::error!(%error, conversation = %prepared.conv_id, "保存路线快照失败，历史地图不可恢复");
-                }
                 tracing::info!(
                     conversation = %prepared.conv_id,
                     model = %model.model,
