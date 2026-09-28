@@ -96,8 +96,8 @@
   </header>
 
   {#if view === "chat"}
-    <!-- 对话占满：气泡流与会话列表都要宽度，挤在侧栏里没法读。 -->
-    <ChatPanel />
+    <!-- 对话页复用 planner 的路线状态；切换到安心换乘后继续编辑而不重算。 -->
+    <ChatPanel onopenroute={() => selectView("route")} />
   {:else if view === "logs"}
     <!-- 日志占满：每行都长，挤在 400px 侧栏里全是折行。 -->
     <LogPanel />

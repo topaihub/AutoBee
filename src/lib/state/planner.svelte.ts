@@ -190,9 +190,17 @@ export class PlannerState {
    * 把一份算好的方案写进状态。`run()` 与大模型工具调用共用这条路径 ——
    * 直接赋值 `planner.plan` 会绕过选中项与降级文案，地图能画但卡片选不中。
    */
-  applyPlan(plan: RoutePlan): void {
+  applyPlan(plan: RoutePlan, syncEndpoints = false): void {
     this.plan = plan;
     this.selectedRouteId = this.routes[0]?.id ?? null;
+    if (syncEndpoints) {
+      // 仅 AI 工具回灌需要把归一化标题带回输入框；手动规划不能覆盖用户原始输入。
+      // 不伪造 Place：RoutePlan 只有归一化后的标题与坐标，硬造 Place 会丢失真实地点来源/id 语义。
+      this.fromText = plan.origin.title;
+      this.toText = plan.destination.title;
+      this.fromPlace = null;
+      this.toPlace = null;
+    }
     this.error = "";
     this.degradedNote = plan.degraded
       ? `${plan.degraded.tried.join("、")} 暂不可用，本次结果来自备用服务商。`

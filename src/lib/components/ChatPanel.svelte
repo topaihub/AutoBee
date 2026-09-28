@@ -12,6 +12,10 @@
   import Button from "$lib/components/ui/button/Button.svelte";
   import Select from "$lib/components/ui/select/Select.svelte";
   import ChatBubble from "$lib/components/ChatBubble.svelte";
+  import MapCanvas from "$lib/components/app/MapCanvas.svelte";
+  import { planner } from "$lib/state/planner.svelte";
+
+  let { onopenroute = () => {} }: { onopenroute?: () => void } = $props();
 
   let draft = $state("");
   let scroller = $state<HTMLDivElement | null>(null);
@@ -191,6 +195,21 @@
         <p class="text-[11px] text-muted-foreground">正在思考…</p>
       {/if}
     </div>
+
+    {#if chat.hasRouteResult && planner.plan}
+      <section class="mx-4 mb-3 flex shrink-0 flex-col gap-2 rounded-lg border bg-card p-3" aria-label="路线地图">
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <h3 class="truncate text-xs font-semibold">路线地图</h3>
+            <p class="truncate text-[11px] text-muted-foreground">
+              {planner.plan.origin.title} → {planner.plan.destination.title}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onclick={onopenroute}>在安心换乘中调整</Button>
+        </div>
+        <MapCanvas class="h-[280px] w-full sm:h-[340px]" />
+      </section>
+    {/if}
 
     {#if chat.error}
       <p class="mx-4 mb-2 shrink-0 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{chat.error}</p>

@@ -42,6 +42,8 @@ export class ChatState {
   /** null = 新会话，还没落库。首轮 `send` 之后换成后端给的 `convId`。 */
   currentId = $state<string | null>(null);
   messages = $state<ChatItem[]>([]);
+  /** 当前对话是否产生过路线工具结果；避免把安心换乘的旧路线误显示在聊天页。 */
+  hasRouteResult = $state(false);
 
   /** 一轮对话在飞。为真时不许再发 —— 同一个会话并发两轮，历史顺序会错乱。 */
   sending = $state(false);
@@ -89,7 +91,7 @@ export class ChatState {
   async openConversation(id: string): Promise<void> {
     this.currentId = id;
     this.messages = [];
-    this.loading = true;
+    this.hasRouteResult = false;
     this.error = "";
     try {
       this.messages = await this.client.readConversation(id);
@@ -100,11 +102,10 @@ export class ChatState {
     }
   }
 
-  /** 新会话。此刻不建库记录 —— 用户可能什么都不发就切走，空会话没人想看。 */
   newConversation(): void {
     this.currentId = null;
     this.messages = [];
-    this.error = "";
+    this.hasRouteResult = false;
   }
 
   async deleteConversation(id: string): Promise<void> {
@@ -240,8 +241,10 @@ export class ChatState {
         this.toolHint = "";
         // 回灌地图（§6.4.2）：算得出路线却画不出来，等于没解决问题。
         // 走 applyPlan / applyCircle 而不是直接赋值 —— 那两条路径还管选中项、
-        // 降级文案与包勾选,绕过去地图能画但卡片选不中。
-        if (event.plan) planner.applyPlan(event.plan);
+        if (event.plan) {
+          planner.applyPlan(event.plan, true);
+          this.hasRouteResult = true;
+        }
         if (event.circle) planner.applyCircle(event.circle);
         break;
       case "done":

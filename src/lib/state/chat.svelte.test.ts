@@ -439,6 +439,9 @@ describe("ChatState", () => {
     if (!restoredPlan) throw new Error("toolEnd 没有回灌路线");
     expect(restoredPlan.routes[0]?.segments[0]?.points).toHaveLength(3);
     expect(planner.selectedRouteId).toBe("r0");
+    expect(planner.fromText).toBe("光谷广场");
+    expect(planner.toText).toBe("汉口火车站");
+    expect(state.hasRouteResult).toBe(true);
   });
 
   it("toolEnd 带 circle 时回灌 circleResults", async () => {
