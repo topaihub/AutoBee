@@ -102,6 +102,11 @@
     };
   }
 
+  const BAIDU_MCP_ENDPOINT = "https://mcp.map.baidu.com/mcp";
+  function isBaiduMcp(server: (typeof mcp.list)[number]): boolean {
+    return server.url === BAIDU_MCP_ENDPOINT;
+  }
+
   async function saveMcp(server: (typeof mcp.list)[number]) {
     await mcp.save(mcpDraftOf(server));
   }
@@ -438,12 +443,16 @@
                 <Button size="sm" variant="destructive" onclick={() => void mcp.remove(server.id)}>删除</Button>
               </div>
             </div>
-            <div class="mt-2 grid gap-2 sm:grid-cols-2">
-              <Input class="h-8 text-xs" ariaLabel="MCP server 名称" value={draft.name}
-                oninput={(event) => (mcpDrafts[server.id] = { ...draft, name: event.currentTarget.value })} />
-              <Input class="h-8 text-xs" ariaLabel="MCP server 地址" value={draft.url}
-                oninput={(event) => (mcpDrafts[server.id] = { ...draft, url: event.currentTarget.value })} />
-            </div>
+            {#if isBaiduMcp(server)}
+              <p class="mt-2 text-[11px] text-muted-foreground">复用“百度地图”服务商中已配置的服务端 AK。</p>
+            {:else}
+              <div class="mt-2 grid gap-2 sm:grid-cols-2">
+                <Input class="h-8 text-xs" ariaLabel="MCP server 名称" value={draft.name}
+                  oninput={(event) => (mcpDrafts[server.id] = { ...draft, name: event.currentTarget.value })} />
+                <Input class="h-8 text-xs" ariaLabel="MCP server 地址" value={draft.url}
+                  oninput={(event) => (mcpDrafts[server.id] = { ...draft, url: event.currentTarget.value })} />
+              </div>
+            {/if}
             {#if mcp.toolErrors[server.id]}
               <p class="mt-1.5 text-[11px] text-destructive" role="alert">{mcp.toolErrors[server.id]}</p>
             {/if}

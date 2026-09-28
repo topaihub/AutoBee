@@ -6,7 +6,7 @@ use rusqlite::Connection;
 
 use crate::error::AppError;
 
-const VERSION: i64 = 8;
+const VERSION: i64 = 9;
 
 /// 建表 SQL。`IF NOT EXISTS` 让它可以在每次开库时无条件跑一遍。
 const CREATE: &str = "
@@ -148,6 +148,16 @@ fn migrate(conn: &Connection, from: i64) -> Result<(), AppError> {
                 return Err(sql_error("加浏览器 AK 列", &error));
             }
         }
+    }
+    if from < 9 {
+        // 百度 MCP 的 AK 与 map_providers.baidu.api_key_enc 是同一份服务端密钥。
+        // 旧版 URL 里带 ?ak= 明文，升级时只保留固定端点，运行时再从 DPAPI 密文拼接。
+        conn.execute(
+            "UPDATE mcp_servers SET url = 'https://mcp.map.baidu.com/mcp'
+             WHERE url LIKE 'https://mcp.map.baidu.com/mcp?%'",
+            [],
+        )
+        .map_err(|error| sql_error("迁移百度 MCP 地址", &error))?;
     }
     if from > VERSION {
         tracing::warn!(
@@ -382,6 +392,28 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
         assert_eq!(version, VERSION);
+    }
+
+    #[test]
+    fn 版本八升级会移除百度_mcp_url_里的_ak() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE mcp_servers (id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0);
+             INSERT INTO mcp_servers (id, name, url) VALUES ('baidu', 'baidu', 'https://mcp.map.baidu.com/mcp?ak=old-key');
+             PRAGMA user_version = 8;",
+        )
+        .unwrap();
+
+        prepare(&conn).unwrap();
+
+        let url: String = conn
+            .query_row(
+                "SELECT url FROM mcp_servers WHERE id = 'baidu'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(url, "https://mcp.map.baidu.com/mcp");
     }
 
     #[test]

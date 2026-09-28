@@ -23,6 +23,52 @@ const PROTOCOL_VERSION: &str = "2024-11-05";
 /// 整页进日志只会把真正的线索淹掉。
 const PREVIEW_CHARS: usize = 200;
 
+/// 百度官方 Streamable HTTP 固定端点。AK 不能存进 MCP URL：同一把服务端 AK 已在
+/// `map_providers` 的 DPAPI 密文列里，重复保存既泄露又会让两处配置漂移。
+pub const BAIDU_MCP_ENDPOINT: &str = "https://mcp.map.baidu.com/mcp";
+
+/// 官方端点允许旧数据带 `?ak=...`，统一视为百度 MCP。
+#[must_use]
+pub fn is_baidu_mcp_url(url: &str) -> bool {
+    url.trim()
+        .strip_prefix(BAIDU_MCP_ENDPOINT)
+        .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with('?'))
+}
+
+/// 将数据库内的 MCP 地址变成一次连接实际使用的地址。
+///
+/// 百度端点从地图服务商档案复用服务端 AK；返回值只活在内存，绝不回写到 URL 列。
+/// 其他 MCP 原样使用用户填写的完整 URL。
+///
+/// # Errors
+///
+/// 百度未启用、未配置服务端 AK、密钥解不开或 SQL 查询失败时返回错误。
+pub fn resolve_url(conn: &Connection, configured_url: &str) -> Result<String, AppError> {
+    if !is_baidu_mcp_url(configured_url) {
+        return Ok(configured_url.to_owned());
+    }
+
+    let cipher: Option<Vec<u8>> = conn
+        .query_row(
+            "SELECT api_key_enc FROM map_providers WHERE slug = 'baidu' AND enabled = 1",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| db_error("读取百度服务端 AK", &error))?;
+    let key = cipher
+        .as_deref()
+        .and_then(crate::credentials::crypto::unprotect)
+        .filter(|key| !key.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::new(
+                "BAIDU_KEY_REQUIRED",
+                "百度 MCP 复用百度地图的服务端 AK；请先在地图服务商里启用百度并填入服务端 AK。",
+                400,
+            )
+        })?;
+    Ok(format!("{BAIDU_MCP_ENDPOINT}?ak={key}"))
+}
+
 // ── 边界标记 ────────────────────────────────────────────────────
 //
 // 外部内容进模型上下文前必须包边界。边界 id 是随机的：固定字符串等于把
@@ -235,8 +281,10 @@ impl McpRegistry {
 
         let mut registry = Self::default();
         for row in rows {
-            let (server, url) = row.map_err(|error| db_error("读取 MCP server 行", &error))?;
-            match Self::connect_one(server, url) {
+            let (server, configured_url) =
+                row.map_err(|error| db_error("读取 MCP server 行", &error))?;
+            match resolve_url(conn, &configured_url).and_then(|url| Self::connect_one(server, url))
+            {
                 Ok(binding) => registry.bindings.push(binding),
                 Err(error) => {
                     tracing::warn!(code = %error.code, %error, "跳过 MCP server：对话工具发现失败")

@@ -14,7 +14,9 @@ use serde::{Deserialize, Serialize};
 
 use autobee_shell::credentials::store::Store;
 use autobee_shell::error::AppError;
-use autobee_shell::llm::mcp::{McpClient, prefixed_name};
+use autobee_shell::llm::mcp::{
+    BAIDU_MCP_ENDPOINT, McpClient, is_baidu_mcp_url, prefixed_name, resolve_url,
+};
 
 /// 后台任务本身崩了（panic）时的兜底。
 fn join_failed(detail: &str) -> AppError {
@@ -135,6 +137,15 @@ fn validate_url(raw: &str) -> Result<String, AppError> {
     Ok(trimmed.to_owned())
 }
 
+/// 百度官方 MCP 不存 AK；其它 server 保留完整用户 URL。
+fn normalize_url(raw: &str) -> Result<String, AppError> {
+    if is_baidu_mcp_url(raw) {
+        Ok(BAIDU_MCP_ENDPOINT.to_owned())
+    } else {
+        validate_url(raw)
+    }
+}
+
 /// 不引 `uuid`：与 `llm::store::new_id` 同样的理由，只要求同一个库里不重复。
 fn new_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -196,7 +207,7 @@ fn save(conn: &Connection, input: &McpServerInput) -> Result<Vec<McpServer>, App
             400,
         ));
     }
-    let url = validate_url(&input.url)?;
+    let url = normalize_url(&input.url)?;
     let enabled = i64::from(input.enabled);
 
     match input.id.as_deref().filter(|id| !id.is_empty()) {
@@ -295,7 +306,9 @@ pub async fn delete_mcp_server(id: String) -> Result<Vec<McpServer>, AppError> {
 #[tauri::command]
 pub async fn list_mcp_tools(id: Option<String>) -> Result<Vec<McpToolInfo>, AppError> {
     tauri::async_runtime::spawn_blocking(move || {
-        let servers = list_all(Store::open()?.conn())?;
+        let store = Store::open()?;
+        let conn = store.conn();
+        let servers = list_all(conn)?;
         let mut out = Vec::new();
 
         match id {
@@ -311,11 +324,11 @@ pub async fn list_mcp_tools(id: Option<String>) -> Result<Vec<McpToolInfo>, AppE
                             404,
                         )
                     })?;
-                out.extend(tools_of(&server)?);
+                out.extend(tools_of(conn, &server)?);
             }
             None => {
                 for server in servers.into_iter().filter(|one| one.enabled) {
-                    match tools_of(&server) {
+                    match tools_of(conn, &server) {
                         Ok(tools) => out.extend(tools),
                         Err(error) => tracing::warn!(
                             server = %server.name,
@@ -336,8 +349,9 @@ pub async fn list_mcp_tools(id: Option<String>) -> Result<Vec<McpToolInfo>, AppE
 }
 
 /// 连一个 server 并列出它的工具，名字已加前缀。
-fn tools_of(server: &McpServer) -> Result<Vec<McpToolInfo>, AppError> {
-    let mut client = McpClient::connect(&server.url)?;
+fn tools_of(conn: &Connection, server: &McpServer) -> Result<Vec<McpToolInfo>, AppError> {
+    let url = resolve_url(conn, &server.url)?;
+    let mut client = McpClient::connect(&url)?;
     let tools = client.list_tools()?;
     tracing::info!(server = %server.name, tools = tools.len(), "MCP 工具列表已取回");
     Ok(tools
@@ -420,6 +434,22 @@ mod tests {
         assert_eq!(host_of("[::1]:8931/mcp"), "[::1]");
         assert_eq!(host_of("127.0.0.1:8931/mcp?x=1"), "127.0.0.1");
         assert_eq!(host_of("mcp.example.com/sse"), "mcp.example.com");
+    }
+
+    #[test]
+    fn 百度官方_mcp_地址去掉重复_ak_而第三方保持原样() {
+        assert_eq!(
+            normalize_url("https://mcp.map.baidu.com/mcp?ak=old-key").unwrap(),
+            BAIDU_MCP_ENDPOINT
+        );
+        assert_eq!(
+            normalize_url(BAIDU_MCP_ENDPOINT).unwrap(),
+            BAIDU_MCP_ENDPOINT
+        );
+        assert_eq!(
+            normalize_url("https://mcp.example.com/mcp?token=keep-me").unwrap(),
+            "https://mcp.example.com/mcp?token=keep-me"
+        );
     }
 
     #[test]
