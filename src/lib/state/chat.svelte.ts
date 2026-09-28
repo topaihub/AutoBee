@@ -6,7 +6,7 @@
  * `done` 事件到了才换成库里那几条。
  */
 import { tauriPlannerClient, type PlannerClient } from "../ipc/client";
-import type { ChatMessage, ChatStreamEvent, Conversation, ModelRef } from "../ipc/types";
+import type { ChatMessage, ChatStreamEvent, Conversation, ModelRef, RoutePlan } from "../ipc/types";
 import { errorMessage, planner } from "./planner.svelte";
 
 /**
@@ -70,6 +70,11 @@ export class ChatState {
 
   /** 当前流的 id，给「停止」用。null = 没有流在跑。 */
   #streamId: string | null = null;
+  /**
+   * 本次运行期间收到的完整路线，按会话隔离。
+   * SQLite 只存裁剪后的 tool 摘要，所以应用重启后不能伪造路线地图。
+   */
+  #routePlans = new Map<string, RoutePlan>();
   /** 当前流的退订函数。流结束或被取消时必须调，否则监听器越积越多。 */
   #unlisten: (() => void) | null = null;
 
@@ -91,7 +96,10 @@ export class ChatState {
   async openConversation(id: string): Promise<void> {
     this.currentId = id;
     this.messages = [];
-    this.hasRouteResult = false;
+    const cachedPlan = this.#routePlans.get(id);
+    this.hasRouteResult = cachedPlan !== undefined;
+    if (cachedPlan) planner.applyPlan(cachedPlan, true);
+    this.loading = true;
     this.error = "";
     try {
       this.messages = await this.client.readConversation(id);
@@ -117,6 +125,7 @@ export class ChatState {
       return;
     }
     this.list = this.list.filter((item) => item.id !== id);
+    this.#routePlans.delete(id);
     if (this.currentId === id) this.newConversation();
   }
 
@@ -243,6 +252,7 @@ export class ChatState {
         // 走 applyPlan / applyCircle 而不是直接赋值 —— 那两条路径还管选中项、
         if (event.plan) {
           planner.applyPlan(event.plan, true);
+          if (this.currentId) this.#routePlans.set(this.currentId, event.plan);
           this.hasRouteResult = true;
         }
         if (event.circle) planner.applyCircle(event.circle);

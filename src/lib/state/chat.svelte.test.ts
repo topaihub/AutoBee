@@ -73,10 +73,15 @@ function message(id: string, convId: string, role: ChatMessage["role"], content:
  * `emit` 把一条事件同步推给状态层，测试因此能精确控制「流到哪一步了」——
  * 用定时器等事件到达会让这组测试变成偶发失败的那一类。
  */
-function streamHarness(convId = "c1", userText = "你好") {
+function streamHarness(
+  convId = "c1",
+  userText = "你好",
+  overrides: Partial<PlannerClient> = {},
+) {
   let handler: ((event: ChatStreamEvent) => void) | null = null;
   const unlisten = vi.fn();
   const client = fakeClient({
+    ...overrides,
     chatStart: vi.fn(async () => ({
       streamId: "s1",
       convId,
@@ -442,6 +447,24 @@ describe("ChatState", () => {
     expect(planner.fromText).toBe("光谷广场");
     expect(planner.toText).toBe("汉口火车站");
     expect(state.hasRouteResult).toBe(true);
+  });
+
+  it("切换历史再切回时恢复该会话的路线地图", async () => {
+    const harness = streamHarness("a1", "从光谷去汉口", {
+      readConversation: vi.fn(async (id: string) => [message(`${id}-m`, id, "user", "历史消息")]),
+    });
+    const state = ready(harness.client);
+    await state.send("从光谷去汉口");
+    harness.emit({ kind: "toolEnd", tool: "plan_route", ok: true, summary: "找到路线", plan: chatPlan() });
+
+    await state.openConversation("b1");
+    expect(state.hasRouteResult).toBe(false);
+    await state.openConversation("a1");
+
+    expect(state.hasRouteResult).toBe(true);
+    expect(planner.plan?.routes[0]?.segments[0]?.points).toHaveLength(3);
+    expect(planner.fromText).toBe("光谷广场");
+    expect(planner.toText).toBe("汉口火车站");
   });
 
   it("toolEnd 带 circle 时回灌 circleResults", async () => {
