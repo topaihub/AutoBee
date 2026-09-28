@@ -10,6 +10,7 @@
   import { providers } from "$lib/state/providers.svelte";
   import { llm } from "$lib/state/llm.svelte";
   import { mcp } from "$lib/state/mcp.svelte";
+  import { skills } from "$lib/state/skills.svelte";
   import type { Crs, LlmProtocol, LlmProviderInput, MapProviderInput, McpServerInput, ProviderId } from "$lib/ipc/types";
   import { DEFAULT_LABEL_THRESHOLDS } from "$lib/domain/accessibility";
   import { partialKeyHint } from "$lib/domain/provider-profile";
@@ -38,6 +39,7 @@
       void providers.load();
       void llm.load();
       void mcp.load();
+      void skills.load();
       keyDrafts = {};
       browserKeyDrafts = {};
       llmKeyDrafts = {};
@@ -121,6 +123,19 @@
   async function addMcp() {
     await mcp.save({ ...newMcp, name: newMcp.name.trim(), url: newMcp.url.trim() });
     if (!mcp.error) newMcp = { ...空白Mcp };
+  }
+
+  function chooseSkillPackage(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) void skills.importPackage(file);
+    input.value = "";
+  }
+
+  function skillMcpIds(skill: (typeof skills.list)[number], serverId: string, checked: boolean): string[] {
+    return checked
+      ? [...new Set([...skill.mcpServerIds, serverId])]
+      : skill.mcpServerIds.filter((id) => id !== serverId);
   }
 
   // 列表加载后同步本地草稿（只在还没有草稿时初始化，避免覆盖用户输入）
@@ -469,6 +484,7 @@
           </div>
         {/each}
       </div>
+
       <div class="rounded-lg border border-dashed p-3">
         <p class="text-xs font-medium">添加 MCP server</p>
         <div class="mt-2 grid gap-2 sm:grid-cols-2">
@@ -484,6 +500,73 @@
     {/if}
   </section>
 
+
+  <Separator class="my-4" />
+
+  <section class="flex flex-col gap-3">
+    <div class="flex items-center justify-between gap-2">
+      <div>
+        <h3 class="text-xs font-semibold text-muted-foreground">Skills</h3>
+        <p class="mt-1 text-[11px] text-muted-foreground">离线包只提供对话指引和已绑定 MCP 工具；不会执行包内脚本。</p>
+      </div>
+      {#if skills.saved}<Badge variant="success">已保存</Badge>{/if}
+    </div>
+    {#if skills.error}
+      <p class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{skills.error}</p>
+    {/if}
+    <div class="flex items-center justify-between gap-2 rounded-lg border border-dashed p-3">
+      <div>
+        <p class="text-xs font-medium">导入本地 Skill 包</p>
+        <p class="mt-1 text-[11px] text-muted-foreground">仅接受含 skill.json 和 SKILL.md 的 .zip；新声明的 MCP 服务默认关闭。</p>
+      </div>
+      <label>
+        <input class="sr-only" type="file" accept=".zip,application/zip" onchange={chooseSkillPackage} disabled={skills.importing} />
+        <Button size="sm" disabled={skills.importing}>{skills.importing ? "导入中…" : "选择 .zip"}</Button>
+      </label>
+    </div>
+    {#if skills.loading}
+      <p class="py-4 text-center text-xs text-muted-foreground">加载中…</p>
+    {:else if skills.list.length === 0}
+      <p class="rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">还没有导入 Skill。</p>
+    {:else}
+      <div class="flex flex-col gap-2">
+        {#each skills.list as skill (skill.id)}
+          <div class="rounded-lg border p-3">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex min-w-0 items-center gap-2">
+                <Switch checked={skill.enabled} onchange={(enabled) => void skills.setEnabled(skill.id, enabled)} />
+                <span class="truncate text-sm font-medium">{skill.name}</span>
+                <Badge variant="outline">v{skill.version}</Badge>
+              </div>
+              <Button size="sm" variant="destructive" disabled={skills.saving} onclick={() => void skills.remove(skill.id)}>删除</Button>
+            </div>
+            <p class="mt-2 text-xs text-muted-foreground">{skill.description}</p>
+            <details class="mt-2 text-xs">
+              <summary class="cursor-pointer text-muted-foreground">查看指引</summary>
+              <pre class="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/30 p-2 text-[11px]">{skill.instructions}</pre>
+            </details>
+            <div class="mt-3">
+              <p class="text-[11px] font-medium text-muted-foreground">绑定的 MCP 服务</p>
+              {#if mcp.list.length === 0}
+                <p class="mt-1 text-[11px] text-muted-foreground">先在 MCP 工具服务中添加一个 server。</p>
+              {:else}
+                <div class="mt-1 flex flex-col gap-1">
+                  {#each mcp.list as server (server.id)}
+                    <label class="flex cursor-pointer items-center gap-2 text-xs">
+                      <input type="checkbox" checked={skill.mcpServerIds.includes(server.id)}
+                        onchange={(event) => void skills.setMcpServers(skill.id, skillMcpIds(skill, server.id, event.currentTarget.checked))} />
+                      <span>{server.name}</span>
+                      {#if !server.enabled}<Badge variant="outline">服务已关闭</Badge>{/if}
+                    </label>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </section>
   <Separator class="my-4" />
 
   <section class="space-y-3">

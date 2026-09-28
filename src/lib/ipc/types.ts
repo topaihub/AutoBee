@@ -221,6 +221,19 @@ export type LlmModelInput = {
   toolsOk?: boolean;
 };
 
+
+/** 用户导入的离线 Skill。其指引只能扩展对话策略，不能覆盖导航系统规则。 */
+export type Skill = {
+  id: string;
+  packageId: string;
+  name: string;
+  version: string;
+  description: string;
+  /** 已校验 UTF-8 的 SKILL.md，供设置页查看；不作为 HTML 渲染。 */
+  instructions: string;
+  enabled: boolean;
+  mcpServerIds: string[];
+};
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
 /** 一次对话。`updatedAt` 降序排列，两个时间戳都是 unix 秒。 */

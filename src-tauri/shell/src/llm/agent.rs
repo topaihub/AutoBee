@@ -67,6 +67,8 @@ pub struct AgentDeps<'a> {
     pub up: Upstream<'a>,
     /// 当前对话发现到的 MCP 工具与连接。
     pub mcp: &'a mut crate::llm::mcp::McpRegistry,
+    /// 启用 Skill 的受控领域指引，已在 command 层从设置库读取。
+    pub skill_prompt: &'a str,
 }
 
 /// 循环过程中发出的事件，供上层做流式推送或打日志。
@@ -154,7 +156,14 @@ pub fn run_turn(
         }
         Ok(outcome)
     };
-    run_loop(&mut ask, &mut exec, history, user_text, on_event)
+    run_loop(
+        &mut ask,
+        &mut exec,
+        history,
+        user_text,
+        deps.skill_prompt,
+        on_event,
+    )
 }
 
 /// 跑一轮对话，正文边生成边通过 [`AgentEvent::Delta`] 推出去。
@@ -198,7 +207,14 @@ pub fn run_turn_streaming(
         }
         Err(error) => Err(error),
     };
-    run_loop(&mut ask, &mut exec, history, user_text, on_event)
+    run_loop(
+        &mut ask,
+        &mut exec,
+        history,
+        user_text,
+        deps.skill_prompt,
+        on_event,
+    )
 }
 
 /// 「问一次模型」的注入点。
@@ -225,12 +241,14 @@ fn run_loop(
     exec: &mut Exec<'_>,
     history: &[ChatMsg],
     user_text: &str,
+    skill_prompt: &str,
     on_event: &mut dyn FnMut(AgentEvent),
 ) -> Result<TurnResult, AppError> {
     // 发给模型的完整上下文：system 每次重新加，不进 appended、不落库 ——
     // 改了 prompt 之后老会话也该用新的。
     let mut messages = Vec::with_capacity(history.len() + 2);
-    messages.push(ChatMsg::text("system", SYSTEM_PROMPT));
+    let system_prompt = format!("{SYSTEM_PROMPT}{skill_prompt}");
+    messages.push(ChatMsg::text("system", system_prompt));
     messages.extend_from_slice(history);
 
     let user = ChatMsg::text("user", user_text);
@@ -481,7 +499,14 @@ mod tests {
         };
         let mut on_event = |event: AgentEvent| events.borrow_mut().push(event);
 
-        let result = run_loop(&mut ask, &mut exec, &[], "从孝陵卫到南京南", &mut on_event);
+        let result = run_loop(
+            &mut ask,
+            &mut exec,
+            &[],
+            "从孝陵卫到南京南",
+            "",
+            &mut on_event,
+        );
         Driven {
             result,
             executed: executed.into_inner(),
@@ -515,6 +540,31 @@ mod tests {
             })
             .collect();
         assert_eq!(failed, vec!["plan_route", "search_place"]);
+    }
+
+    #[test]
+    fn skill_指引追加在不可变导航规则之后() {
+        let mut seen = String::new();
+        let mut ask = |messages: &[ChatMsg], _: &mut dyn FnMut(AgentEvent)| {
+            seen = messages[0].content.clone();
+            Ok(TurnOutcome::Text("已按工具查询".to_owned()))
+        };
+        let mut exec = |_: &str, _: &str| Ok(outcome(""));
+        let mut events = Vec::new();
+        let mut on_event = |event| events.push(event);
+
+        run_loop(
+            &mut ask,
+            &mut exec,
+            &[],
+            "查天气",
+            "\n\n## 用户启用的 Skill：天气\n先调用天气工具。",
+            &mut on_event,
+        )
+        .unwrap();
+
+        assert!(seen.contains("路线、时长、票价、距离、地点信息**一律来自工具返回值**"));
+        assert!(seen.ends_with("先调用天气工具。"));
     }
 
     #[test]
@@ -690,7 +740,7 @@ mod tests {
         // 作用域收住可变借用，出了块才能读 events。
         let result = {
             let mut on_event = |e: AgentEvent| events.push(e);
-            run_loop(&mut ask, &mut exec, &[], "你好", &mut on_event)
+            run_loop(&mut ask, &mut exec, &[], "你好", "", &mut on_event)
         };
 
         assert_eq!(

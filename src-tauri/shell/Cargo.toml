@@ -19,6 +19,9 @@ tracing-subscriber = { version = "0.3", features = ["chrono", "env-filter"] }
 # bundled 把 SQLite 的 C 源码一起编进 exe，不依赖系统 DLL。
 rusqlite = { version = "0.40", features = ["bundled"] }
 
+# 只读内存中的离线 Skill 包；不解压、不执行包内文件。
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
 [target.'cfg(windows)'.dependencies]
 # crypto.rs 的 DPAPI 走这两个 feature。少一个的话 `#[cfg(windows)]` 那半
 # 会静默不编译、密钥变明文落盘，而测试全绿 —— 所以不许按需精简。

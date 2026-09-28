@@ -26,6 +26,7 @@ import type {
   ModelRef,
   Place,
   RoutePlan,
+  Skill,
   Settings,
   SortBy,
   TestResult,
@@ -76,6 +77,13 @@ export interface PlannerClient {
   deleteMcpServer(id: string): Promise<McpServer[]>;
   /** 连上去跑一次 tools/list，不落库。`id` 省略则遍历全部启用的 server。 */
   listMcpTools(id?: string): Promise<McpToolInfo[]>;
+  listSkills(): Promise<Skill[]>;
+  /** ZIP 内只允许 skill.json 与 SKILL.md；导入不执行包内文件。 */
+  importSkillPackage(bytes: number[]): Promise<Skill[]>;
+  setSkillEnabled(id: string, enabled: boolean): Promise<Skill[]>;
+  /** 覆盖 Skill 与 MCP server 的绑定，不删除 server。 */
+  setSkillMcpServers(id: string, serverIds: string[]): Promise<Skill[]>;
+  deleteSkill(id: string): Promise<Skill[]>;
 }
 
 /** 真实实现：转发给 Tauri。 */
@@ -108,4 +116,9 @@ export const tauriPlannerClient: PlannerClient = {
   saveMcpServer: (input) => invokeCmd("save_mcp_server", { input }),
   deleteMcpServer: (id) => invokeCmd("delete_mcp_server", { id }),
   listMcpTools: (id) => invokeCmd("list_mcp_tools", { id }),
+  listSkills: () => invokeCmd("list_skills"),
+  importSkillPackage: (bytes) => invokeCmd("import_skill_package", { bytes }),
+  setSkillEnabled: (id, enabled) => invokeCmd("set_skill_enabled", { id, enabled }),
+  setSkillMcpServers: (id, serverIds) => invokeCmd("set_skill_mcp_servers", { id, serverIds }),
+  deleteSkill: (id) => invokeCmd("delete_skill", { id }),
 };

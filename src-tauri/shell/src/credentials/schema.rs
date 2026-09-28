@@ -6,7 +6,7 @@ use rusqlite::Connection;
 
 use crate::error::AppError;
 
-const VERSION: i64 = 9;
+const VERSION: i64 = 10;
 
 /// 建表 SQL。`IF NOT EXISTS` 让它可以在每次开库时无条件跑一遍。
 const CREATE: &str = "
@@ -79,6 +79,24 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   url        TEXT    NOT NULL,        -- Streamable HTTP 端点
   enabled    INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS skills (
+  id           TEXT    PRIMARY KEY,
+  package_id   TEXT    NOT NULL UNIQUE, -- 包 manifest 的稳定 id
+  name         TEXT    NOT NULL,
+  version      TEXT    NOT NULL,
+  description  TEXT    NOT NULL,
+  instructions TEXT    NOT NULL,        -- 已校验的 SKILL.md，不执行
+  enabled      INTEGER NOT NULL DEFAULT 0,
+  installed_at INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS skill_mcp_servers (
+  skill_id      TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+  mcp_server_id TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+  PRIMARY KEY (skill_id, mcp_server_id)
 );
 ";
 

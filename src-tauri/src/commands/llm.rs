@@ -15,6 +15,7 @@ use autobee_shell::llm::agent::{AgentDeps, AgentEvent, run_turn_streaming};
 use autobee_shell::llm::conversations::{self, ChatMessageDto, ConversationDto};
 use autobee_shell::llm::mcp::McpRegistry;
 use autobee_shell::llm::protocol::{ChatMsg, ToolCallReq, Upstream};
+use autobee_shell::llm::skills;
 use autobee_shell::llm::tools::ToolPayload;
 use autobee_shell::llm::{probe, store as llm_store};
 use route_core::models::{LifeCircle, RoutePlan};
@@ -367,11 +368,16 @@ fn run_stream(
             return;
         }
     };
-    let mut mcp = match Store::open().and_then(|store| McpRegistry::load_enabled(store.conn())) {
-        Ok(registry) => registry,
+    let (mut mcp, skill_prompt) = match Store::open().and_then(|store| {
+        Ok((
+            McpRegistry::load_enabled(store.conn())?,
+            skills::enabled_context(store.conn())?.prompt,
+        ))
+    }) {
+        Ok(value) => value,
         Err(error) => {
-            tracing::warn!(code = %error.code, %error, "跳过 MCP 工具：读取配置失败");
-            McpRegistry::default()
+            tracing::warn!(code = %error.code, %error, "跳过 MCP 与 Skill：读取配置失败");
+            (McpRegistry::default(), String::new())
         }
     };
     let mut deps = AgentDeps {
@@ -383,6 +389,7 @@ fn run_stream(
             model: &model.model,
         },
         mcp: &mut mcp,
+        skill_prompt: &skill_prompt,
     };
 
     let mut sink = |event: AgentEvent| {

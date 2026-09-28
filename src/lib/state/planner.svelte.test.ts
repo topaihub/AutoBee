@@ -68,6 +68,11 @@ function fakeClient(overrides: Partial<PlannerClient> = {}): PlannerClient {
     saveMcpServer: vi.fn(async () => []),
     deleteMcpServer: vi.fn(async () => []),
     listMcpTools: vi.fn(async () => []),
+    listSkills: vi.fn(async () => []),
+    importSkillPackage: vi.fn(async () => []),
+    setSkillEnabled: vi.fn(async () => []),
+    setSkillMcpServers: vi.fn(async () => []),
+    deleteSkill: vi.fn(async () => []),
     ...overrides,
   };
 }

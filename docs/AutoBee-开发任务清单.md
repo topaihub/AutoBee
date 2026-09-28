@@ -422,6 +422,14 @@ shell 那 55 条按模块实测:`llm::store` 8、`llm::probe` 3、`credentials::
   那条注入检出单测就是防线本身
 - [ ] **大模型 M5-5 验收扩展性** — 代码闭环已具备；百度 `tools/list` 已返回 14 个真实工具，但真实 `tools/call map_weather` 被百度侧 `Service activation timeout after 12 seconds` 拒绝，需先在控制台启用该 AK 的 MCP 服务；还需真实模型问答验收。
 
+
+### 大模型 M6 Skills — 大模型方案 §2.2.3
+
+- [x] **M6-1 离线 Skill 包与数据库** — 仅导入 `.zip` 根目录的 `skill.json` / `SKILL.md`；不解压、不执行脚本，逐项限长，拒绝路径穿越、未知文件和包内凭据。
+- [x] **M6-2 Skill 与 MCP 绑定** — 新声明 server 默认关闭；同名不同地址拒绝覆盖；删除 Skill 不删 server；启用 Skill 最多三个。
+- [x] **M6-3 对话装配与工具筛选** — 不可变导航 system prompt 在前；已启用 Skill 指引追加其后；独占绑定 MCP 只在关联 Skill 启用时进工具列表；历史未绑定 MCP 保持兼容。
+- [x] **M6-4 设置页与 IPC** — 导入、查看指引、启停、绑定/解绑 MCP server、删除；不展示或录入包内密钥。
+- [x] **M6-5 验收与质量门** — 覆盖合法包、恶意包、启停工具可见性、导航链路不变；`pnpm verify` 全绿。
 ## 开发环境:两条不知道就会卡住的
 
 ### cargo 必须走 wrapper

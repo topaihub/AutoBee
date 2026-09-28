@@ -41,6 +41,11 @@ pub fn run() {
             commands::save_mcp_server,
             commands::delete_mcp_server,
             commands::list_mcp_tools,
+            commands::list_skills,
+            commands::import_skill_package,
+            commands::set_skill_enabled,
+            commands::set_skill_mcp_servers,
+            commands::delete_skill,
         ])
         .run(tauri::generate_context!())
     {

@@ -35,6 +35,10 @@ pub mod llm;
 /// MCP：server 档案 CRUD、连上去列工具。
 pub mod mcp;
 
+/// 用户侧 Skill：离线包导入、启停与 MCP server 绑定。
+pub mod skills;
+
 pub use llm::*;
 pub use map::*;
 pub use mcp::*;
+pub use skills::*;

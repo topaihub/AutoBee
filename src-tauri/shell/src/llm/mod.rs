@@ -11,6 +11,7 @@ pub mod conversations;
 pub mod mcp;
 pub mod probe;
 pub mod protocol;
+pub mod skills;
 pub mod sse;
 pub mod store;
 pub mod tools;

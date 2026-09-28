@@ -14,9 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use autobee_shell::credentials::store::Store;
 use autobee_shell::error::AppError;
-use autobee_shell::llm::mcp::{
-    BAIDU_MCP_ENDPOINT, McpClient, is_baidu_mcp_url, prefixed_name, resolve_url,
-};
+use autobee_shell::llm::mcp::{McpClient, normalize_configured_url, prefixed_name, resolve_url};
 
 /// 后台任务本身崩了（panic）时的兜底。
 fn join_failed(detail: &str) -> AppError {
@@ -57,93 +55,25 @@ pub struct McpToolInfo {
     pub description: String,
 }
 
-/// 本机的几种写法。IPv6 字面量在 URL 里带方括号，去掉括号后的裸 `::1`
-/// 也认 —— 用户两种都可能手填。
-const LOOPBACK_HOSTS: [&str; 4] = ["127.0.0.1", "localhost", "::1", "[::1]"];
+/// 保留 command 层名字，是既有 URL 校验回归测试的接缝；规则唯一来源在 shell，
+/// Skill 导入与手工添加 MCP server 不会因两份实现漂移。
+#[cfg(test)]
+fn validate_url(raw: &str) -> Result<String, AppError> {
+    normalize_configured_url(raw)
+}
 
-/// 从 `http(s)://` 之后切出 host（去掉 userinfo、端口、路径）。
-///
-/// 不引 `url` crate：这里只需要 scheme 与 host 两段，而 `mcp.rs` 的
-/// `McpClient::connect` 也是按前缀判断的，两处保持同一种做法。
+fn normalize_url(raw: &str) -> Result<String, AppError> {
+    normalize_configured_url(raw)
+}
+
+#[cfg(test)]
 fn host_of(rest: &str) -> &str {
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    // `user:pass@host` 里 host 在 `@` 之后；没有 `@` 时整段就是 host。
     let after_userinfo = authority.rsplit('@').next().unwrap_or_default();
-
-    // IPv6 字面量形如 `[::1]:8931`，端口在右方括号之后，不能按第一个冒号切。
     if let Some(end) = after_userinfo.find(']') {
         return &after_userinfo[..=end];
     }
     after_userinfo.split(':').next().unwrap_or_default()
-}
-
-/// 校验并规范化 MCP server 地址：只放过 HTTPS 与指向本机的 HTTP（见模块文档）。
-///
-/// # Errors
-///
-/// 空串、非 http(s) 协议、缺主机名、明文 HTTP 指向非本机时返回 400。
-fn validate_url(raw: &str) -> Result<String, AppError> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err(AppError::new(
-            "MCP_URL_REQUIRED",
-            "请填 MCP server 的地址。",
-            400,
-        ));
-    }
-
-    let Some((scheme, rest)) = trimmed.split_once("://") else {
-        return Err(AppError::new(
-            "MCP_URL_SCHEME",
-            format!("MCP server 地址得以 https:// 开头，当前填的是「{trimmed}」。"),
-            400,
-        ));
-    };
-
-    // scheme 大小写不敏感（RFC 3986），`HTTPS://` 是合法写法。
-    let scheme = scheme.to_ascii_lowercase();
-    let host = host_of(rest).to_ascii_lowercase();
-
-    if host.is_empty() {
-        return Err(AppError::new(
-            "MCP_URL_INVALID",
-            format!("MCP server 地址「{trimmed}」没有主机名。"),
-            400,
-        ));
-    }
-
-    match scheme.as_str() {
-        "https" => {}
-        "http" if LOOPBACK_HOSTS.contains(&host.as_str()) => {}
-        "http" => {
-            return Err(AppError::new(
-                "MCP_URL_INSECURE",
-                format!(
-                    "「{trimmed}」是明文 HTTP 且不在本机。工具参数可能含你的位置和行程，\
-                     发到外网会被链路上每一跳看到。请改用 https://，或把 server 跑在本机。"
-                ),
-                400,
-            ));
-        }
-        other => {
-            return Err(AppError::new(
-                "MCP_URL_SCHEME",
-                format!("MCP server 地址只支持 http / https，收到「{other}」。"),
-                400,
-            ));
-        }
-    }
-
-    Ok(trimmed.to_owned())
-}
-
-/// 百度官方 MCP 不存 AK；其它 server 保留完整用户 URL。
-fn normalize_url(raw: &str) -> Result<String, AppError> {
-    if is_baidu_mcp_url(raw) {
-        Ok(BAIDU_MCP_ENDPOINT.to_owned())
-    } else {
-        validate_url(raw)
-    }
 }
 
 /// 不引 `uuid`：与 `llm::store::new_id` 同样的理由，只要求同一个库里不重复。
@@ -368,6 +298,7 @@ fn tools_of(conn: &Connection, server: &McpServer) -> Result<Vec<McpToolInfo>, A
 #[allow(clippy::unwrap_used, reason = "测试里断言失败即测试失败")]
 mod tests {
     use super::*;
+    use autobee_shell::llm::mcp::BAIDU_MCP_ENDPOINT;
 
     #[test]
     fn https_is_allowed() {

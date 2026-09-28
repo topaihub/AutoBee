@@ -69,6 +69,69 @@ pub fn resolve_url(conn: &Connection, configured_url: &str) -> Result<String, Ap
     Ok(format!("{BAIDU_MCP_ENDPOINT}?ak={key}"))
 }
 
+/// 校验并规范化 MCP server 地址：只放过 HTTPS 与指向本机的 HTTP。
+///
+/// # Errors
+///
+/// 空串、非 http(s) 协议、缺主机名、明文 HTTP 指向非本机时返回 400。
+pub fn normalize_configured_url(raw: &str) -> Result<String, AppError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::new(
+            "MCP_URL_REQUIRED",
+            "请填 MCP server 的地址。",
+            400,
+        ));
+    }
+    if is_baidu_mcp_url(trimmed) {
+        return Ok(BAIDU_MCP_ENDPOINT.to_owned());
+    }
+    let Some((scheme, rest)) = trimmed.split_once("://") else {
+        return Err(AppError::new(
+            "MCP_URL_SCHEME",
+            format!("MCP server 地址得以 https:// 开头，当前填的是「{trimmed}」。"),
+            400,
+        ));
+    };
+    let scheme = scheme.to_ascii_lowercase();
+    let host = host_of(rest).to_ascii_lowercase();
+    if host.is_empty() {
+        return Err(AppError::new(
+            "MCP_URL_INVALID",
+            format!("MCP server 地址「{trimmed}」没有主机名。"),
+            400,
+        ));
+    }
+    match scheme.as_str() {
+        "https" => Ok(trimmed.to_owned()),
+        "http" if ["127.0.0.1", "localhost", "::1", "[::1]"].contains(&host.as_str()) => {
+            Ok(trimmed.to_owned())
+        }
+        "http" => Err(AppError::new(
+            "MCP_URL_INSECURE",
+            format!(
+                "「{trimmed}」是明文 HTTP 且不在本机。工具参数可能含你的位置和行程，\
+                 发到外网会被链路上每一跳看到。请改用 https://，或把 server 跑在本机。"
+            ),
+            400,
+        )),
+        other => Err(AppError::new(
+            "MCP_URL_SCHEME",
+            format!("MCP server 地址只支持 http / https，收到「{other}」。"),
+            400,
+        )),
+    }
+}
+
+fn host_of(rest: &str) -> &str {
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let after_userinfo = authority.rsplit('@').next().unwrap_or_default();
+    if let Some(end) = after_userinfo.find(']') {
+        return &after_userinfo[..=end];
+    }
+    after_userinfo.split(':').next().unwrap_or_default()
+}
+
 // ── 边界标记 ────────────────────────────────────────────────────
 //
 // 外部内容进模型上下文前必须包边界。边界 id 是随机的：固定字符串等于把
@@ -262,27 +325,18 @@ struct McpToolBinding {
 }
 
 impl McpRegistry {
-    /// 读取已启用 server。单个 server 连接失败只跳过它，避免一个坏地址遮蔽其它工具。
+    /// 读取可用于本轮对话的 server：没有被任何 Skill 绑定的历史通用 server 一直可用；
+    /// 有绑定时至少要有一个关联 Skill 启用。这样升级不会让已有 MCP 消失，停用 Skill
+    /// 又能确实撤走它独占的外部工具。
     ///
     /// # Errors
     ///
     /// 配置库查询失败时返回数据库错误；单个 server 的网络或协议错误只记日志并跳过。
     pub fn load_enabled(conn: &Connection) -> Result<Self, AppError> {
-        let mut stmt = conn
-            .prepare(
-                "SELECT name, url FROM mcp_servers WHERE enabled = 1 ORDER BY sort_order, name",
-            )
-            .map_err(|error| db_error("查询 MCP server", &error))?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })
-            .map_err(|error| db_error("读取 MCP server", &error))?;
+        let rows = configured_servers(conn)?;
 
         let mut registry = Self::default();
-        for row in rows {
-            let (server, configured_url) =
-                row.map_err(|error| db_error("读取 MCP server 行", &error))?;
+        for (server, configured_url) in rows {
             match resolve_url(conn, &configured_url).and_then(|url| Self::connect_one(server, url))
             {
                 Ok(binding) => registry.bindings.push(binding),
@@ -354,6 +408,36 @@ impl McpRegistry {
             400,
         ))
     }
+}
+
+/// 取出当前可暴露给 Agent 的 server。独立于握手，便于精确验证 Skill 启停筛选。
+fn configured_servers(conn: &Connection) -> Result<Vec<(String, String)>, AppError> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT server.name, server.url
+             FROM mcp_servers AS server
+             WHERE server.enabled = 1
+               AND (
+                 NOT EXISTS (SELECT 1 FROM skill_mcp_servers AS binding WHERE binding.mcp_server_id = server.id)
+                 OR EXISTS (
+                   SELECT 1 FROM skill_mcp_servers AS binding
+                   JOIN skills AS skill ON skill.id = binding.skill_id
+                   WHERE binding.mcp_server_id = server.id AND skill.enabled = 1
+                 )
+               )
+             ORDER BY server.sort_order, server.name",
+        )
+        .map_err(|error| db_error("查询 MCP server", &error))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|error| db_error("读取 MCP server", &error))?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row.map_err(|error| db_error("读取 MCP server 行", &error))?);
+    }
+    Ok(out)
 }
 
 fn db_error(doing: &str, error: &rusqlite::Error) -> AppError {
@@ -756,6 +840,35 @@ mod tests {
             "{name} 里还留着非法字符"
         );
         assert_eq!(prefixed_name("amap-v2", "search"), "mcp_amap_v2_search");
+    }
+
+    #[test]
+    fn skill_绑定的_server_仅在_skill_启用时进入对话列表() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE mcp_servers (id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL, enabled INTEGER NOT NULL, sort_order INTEGER NOT NULL);
+             CREATE TABLE skills (id TEXT PRIMARY KEY, enabled INTEGER NOT NULL);
+             CREATE TABLE skill_mcp_servers (skill_id TEXT NOT NULL, mcp_server_id TEXT NOT NULL);
+             INSERT INTO mcp_servers VALUES ('shared', 'shared', 'https://shared.example/mcp', 1, 0);
+             INSERT INTO mcp_servers VALUES ('bound', 'bound', 'https://bound.example/mcp', 1, 1);
+             INSERT INTO skills VALUES ('skill', 0);
+             INSERT INTO skill_mcp_servers VALUES ('skill', 'bound');",
+        )
+        .unwrap();
+
+        let names = configured_servers(&conn)
+            .unwrap()
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["shared"]);
+        conn.execute("UPDATE skills SET enabled = 1", []).unwrap();
+        let names = configured_servers(&conn)
+            .unwrap()
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["shared", "bound"]);
     }
 
     #[test]
