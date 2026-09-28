@@ -208,8 +208,8 @@ pub struct Segment {
     /// 耗时，分钟。
     pub duration: u32,
     pub points: Vec<LatLng>,
-    /// 步行指令，乘车段为空。
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    /// 步行指令，乘车段为空。空数组序列化时省略，读历史快照时必须回落为空数组。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub instruction: Vec<String>,
     /// 乘车段的线路信息，步行段为 `None`。
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -386,6 +386,26 @@ mod tests {
             serde_json::to_string(&Vehicle::Subway).unwrap(),
             "\"SUBWAY\""
         );
+    }
+
+    #[test]
+    fn 省略空步行指令的路线快照仍能读回() {
+        let segment = Segment {
+            kind: SegmentKind::Transit,
+            distance: 100,
+            duration: 1,
+            points: Vec::new(),
+            instruction: Vec::new(),
+            line: None,
+        };
+        let json = serde_json::to_string(&segment).unwrap();
+        assert!(
+            !json.contains("instruction"),
+            "空数组应当省略以节省快照体积"
+        );
+
+        let restored: Segment = serde_json::from_str(&json).unwrap();
+        assert!(restored.instruction.is_empty());
     }
 
     #[test]
