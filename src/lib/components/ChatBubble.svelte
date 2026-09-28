@@ -59,6 +59,8 @@
   </div>
 {:else if message.role === "system"}
   <p class="mx-auto max-w-[80%] text-center text-[11px] text-muted-foreground">{message.content}</p>
+{:else if message.role === "assistant" && message.content.trim().length === 0 && message.toolCalls}
+  <!-- 工具调用轮没有正文；下方 tool 结果条已承担可视化，不能再渲染空白气泡。 -->
 {:else}
   <div class={cn("flex w-full", mine ? "justify-end" : "justify-start")}>
     <div class={cn("flex max-w-[85%] flex-col gap-1", mine && "items-end")}>
