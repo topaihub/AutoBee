@@ -152,13 +152,10 @@ rem ---------------------------------------------------------------------------
 rem [5/6] Collect into dist\
 rem ---------------------------------------------------------------------------
 echo [5/6] Collecting artifacts into dist\ ...
-rem Wipe the payload dir first. Runtime data lands next to the exe by design
-rem (see shell\src\paths.rs), so launching the packaged build here seeds
-rem %DIST%\data with a settings.db and logs. Compress-Archive packs whatever
-rem is in the folder, so without this the portable zip ships the local
-rem credential store and log file.
-rd /s /q "%DIST%" 2>nul
+rem Preserve %DIST%\data: it contains the packaged runtime state.
+rem Only the two reproducible executables are replaced on each build.
 if not exist "%DIST%" mkdir "%DIST%"
+del /q "%DIST%\AutoBee.exe" "%DIST%\autobee-cli.exe" 2>nul
 if not exist "%INSTALLER%" mkdir "%INSTALLER%"
 
 copy /y "%SRC%\AutoBee.exe" "%DIST%\AutoBee.exe" >nul
@@ -193,7 +190,7 @@ if "%APP_VER%"=="" (
 set "ZIP=%INSTALLER%\AutoBee_%APP_VER%_x64-portable.zip"
 del /q "%ZIP%" 2>nul
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "Compress-Archive -Path '%DIST%' -DestinationPath '%ZIP%' -CompressionLevel Optimal -Force"
+  "$stage = Join-Path $env:TEMP ('AutoBee-zip-' + [guid]::NewGuid().ToString('N')); $payload = Join-Path $stage 'AutoBee'; New-Item -ItemType Directory -Path $payload -Force | Out-Null; Copy-Item -Path (Join-Path '%DIST%' '*.exe') -Destination $payload -Force; Compress-Archive -Path $payload -DestinationPath '%ZIP%' -CompressionLevel Optimal -Force; Remove-Item $stage -Recurse -Force"
 if errorlevel 1 (
   echo ERROR: Compress-Archive failed. 1>&2
   goto fail
