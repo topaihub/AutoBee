@@ -153,9 +153,9 @@ rem [5/6] Collect into dist\
 rem ---------------------------------------------------------------------------
 echo [5/6] Collecting artifacts into dist\ ...
 rem Preserve %DIST%\data: it contains the packaged runtime state.
-rem Only the two reproducible executables are replaced on each build.
+rem `copy /y` below overwrites each executable only after its new build exists.
+rem Do not pre-delete either EXE: a later build failure must leave the last good CLI usable.
 if not exist "%DIST%" mkdir "%DIST%"
-del /q "%DIST%\AutoBee.exe" "%DIST%\autobee-cli.exe" 2>nul
 if not exist "%INSTALLER%" mkdir "%INSTALLER%"
 
 copy /y "%SRC%\AutoBee.exe" "%DIST%\AutoBee.exe" >nul
