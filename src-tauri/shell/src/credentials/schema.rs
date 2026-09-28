@@ -6,7 +6,7 @@ use rusqlite::Connection;
 
 use crate::error::AppError;
 
-const VERSION: i64 = 7;
+const VERSION: i64 = 8;
 
 /// 建表 SQL。`IF NOT EXISTS` 让它可以在每次开库时无条件跑一遍。
 const CREATE: &str = "
@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS llm_messages (
 
 CREATE INDEX IF NOT EXISTS idx_llm_messages_conv
   ON llm_messages(conv_id, created_at);
+
+CREATE TABLE IF NOT EXISTS llm_route_snapshots (
+  conv_id    TEXT PRIMARY KEY REFERENCES llm_conversations(id) ON DELETE CASCADE,
+  plan_json  TEXT NOT NULL,          -- 完整 RoutePlan，供历史地图重绘，不进模型上下文
+  updated_at INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id         TEXT PRIMARY KEY,
@@ -345,6 +351,33 @@ mod tests {
             .unwrap();
         assert_eq!(api, Some(vec![1, 2, 3, 4, 5]), "原有密文必须原样留着");
 
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, VERSION);
+    }
+
+    #[test]
+    fn 版本七老库升级后有路线快照表() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE llm_conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+             PRAGMA user_version = 7;",
+        )
+        .unwrap();
+
+        prepare(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO llm_conversations (id, title, created_at, updated_at) VALUES ('c1', '历史', 1, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO llm_route_snapshots (conv_id, plan_json, updated_at) VALUES ('c1', '{}', 1)",
+            [],
+        )
+        .unwrap();
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();

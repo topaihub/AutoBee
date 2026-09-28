@@ -56,6 +56,8 @@ export interface PlannerClient {
 
   listConversations(): Promise<Conversation[]>;
   readConversation(id: string): Promise<ChatMessage[]>;
+  /** 历史路线的完整折线快照；旧会话没有时返回 null。 */
+  readConversationRoute(id: string): Promise<RoutePlan | null>;
   deleteConversation(id: string): Promise<void>;
   /**
    * 起一轮对话。**立即返回**，正文与工具进展走 `llm:chat:<streamId>` 事件。
@@ -97,6 +99,7 @@ export const tauriPlannerClient: PlannerClient = {
   saveLlmModels: (providerId, models) => invokeCmd("save_llm_models", { providerId, models }),
   listConversations: () => invokeCmd("list_conversations"),
   readConversation: (id) => invokeCmd("read_conversation", { id }),
+  readConversationRoute: (id) => invokeCmd("read_conversation_route", { id }),
   deleteConversation: (id) => invokeCmd("delete_conversation", { id }),
   chatStart: (convId, text, model) => invokeCmd("llm_chat_start", { convId, text, model }),
   chatCancel: (streamId) => invokeCmd("llm_chat_cancel", { streamId }),

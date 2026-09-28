@@ -55,6 +55,7 @@ function fakeClient(overrides: Partial<PlannerClient> = {}): PlannerClient {
     saveLlmModels: vi.fn(async () => []),
     listConversations: vi.fn(async () => []),
     readConversation: vi.fn(async () => []),
+    readConversationRoute: vi.fn(async () => null),
     deleteConversation: vi.fn(async () => undefined),
     chatStart: vi.fn(async () => ({
       streamId: "s0",

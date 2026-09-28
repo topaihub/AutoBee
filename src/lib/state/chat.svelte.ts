@@ -101,9 +101,17 @@ export class ChatState {
     this.hasRouteResult = cachedPlan !== undefined;
     if (cachedPlan) planner.applyPlan(cachedPlan, true);
     this.loading = true;
-    this.error = "";
     try {
-      this.messages = await this.client.readConversation(id);
+      const [messages, snapshot] = await Promise.all([
+        this.client.readConversation(id),
+        this.client.readConversationRoute(id),
+      ]);
+      this.messages = messages;
+      if (snapshot) {
+        this.#routePlans.set(id, snapshot);
+        this.hasRouteResult = true;
+        planner.applyPlan(snapshot, true);
+      }
     } catch (e) {
       this.error = errorMessage(e);
     } finally {

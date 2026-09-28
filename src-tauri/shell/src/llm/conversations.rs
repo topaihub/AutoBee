@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use crate::error::AppError;
 use crate::llm::store::new_id;
 
+#[cfg(test)]
+use route_core::models::{Crs, Endpoint, LatLng, ProviderId, Route, RoutePlan, TravelMode};
+
 /// 标题取首句前 20 **字**。按字节切会把一个汉字劈成两半（UTF-8 下 3 字节），
 /// 得到的不是短标题而是乱码。
 const TITLE_CHARS: usize = 20;
@@ -201,6 +204,62 @@ pub fn delete_conversation(conn: &Connection, id: &str) -> Result<(), AppError> 
     Ok(())
 }
 
+/// 保存一个会话最后一次成功路线工具调用的完整结果。
+///
+/// 完整折线不属于模型上下文，独立表存它才能在重启后重绘历史地图；同一会话只保留
+/// 最新路线，避免每次追问都复制一份几十 KB 的坐标数组。
+///
+/// # Errors
+///
+/// JSON 序列化或 SQL 写入失败时返回错误。
+pub fn save_route_snapshot(
+    conn: &Connection,
+    conv_id: &str,
+    plan: &route_core::models::RoutePlan,
+) -> Result<(), AppError> {
+    let plan_json = serde_json::to_string(plan).map_err(|error| {
+        AppError::new(
+            "SERIALIZE_ERROR",
+            format!("路线快照序列化失败：{error}"),
+            500,
+        )
+    })?;
+    conn.execute(
+        "INSERT INTO llm_route_snapshots (conv_id, plan_json, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(conv_id) DO UPDATE SET plan_json = excluded.plan_json, updated_at = excluded.updated_at",
+        (conv_id, plan_json, now_secs()),
+    )
+    .map_err(|error| sql("保存路线快照", &error))?;
+    Ok(())
+}
+
+/// 读取会话最后一次完整路线快照。旧会话没有快照是正常的，返回 `Ok(None)`。
+///
+/// # Errors
+///
+/// SQL 查询失败或库内 JSON 损坏时返回错误。
+pub fn read_route_snapshot(
+    conn: &Connection,
+    conv_id: &str,
+) -> Result<Option<route_core::models::RoutePlan>, AppError> {
+    let json = match conn.query_row(
+        "SELECT plan_json FROM llm_route_snapshots WHERE conv_id = ?1",
+        [conv_id],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(json) => json,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+        Err(error) => return Err(sql("读取路线快照", &error)),
+    };
+    serde_json::from_str(&json).map(Some).map_err(|error| {
+        AppError::new(
+            "BAD_ROUTE_SNAPSHOT",
+            format!("路线快照读不出来：{error}"),
+            500,
+        )
+    })
+}
+
 /// 用户首句当标题。
 #[must_use]
 pub fn title_from_first_message(text: &str) -> String {
@@ -312,6 +371,40 @@ mod tests {
             .unwrap();
         assert_eq!(剩余, 0, "级联没生效，孤儿消息会一直堆着");
         assert_eq!(read_conversation(&conn, &留下).unwrap().len(), 1, "别连坐");
+    }
+
+    #[test]
+    fn 路线快照跨重开可读且删会话级联清掉() {
+        let conn = memory();
+        let conv = create_conversation(&conn, "路线快照").unwrap();
+        let plan = RoutePlan {
+            origin: Endpoint {
+                title: "光谷广场".to_owned(),
+                location: LatLng::new(30.5, 114.4),
+            },
+            destination: Endpoint {
+                title: "汉口火车站".to_owned(),
+                location: LatLng::new(30.62, 114.26),
+            },
+            mode: TravelMode::Subway,
+            routes: vec![Route {
+                id: "r0".to_owned(),
+                distance: 18_800,
+                duration: 45,
+                price: 5.0,
+                bounds: [LatLng::new(30.5, 114.26), LatLng::new(30.62, 114.4)],
+                segments: Vec::new(),
+            }],
+            provider: ProviderId::Baidu,
+            crs: Crs::Bd09,
+            degraded: None,
+        };
+
+        save_route_snapshot(&conn, &conv, &plan).unwrap();
+        assert_eq!(read_route_snapshot(&conn, &conv).unwrap(), Some(plan));
+
+        delete_conversation(&conn, &conv).unwrap();
+        assert_eq!(read_route_snapshot(&conn, &conv).unwrap(), None);
     }
 
     #[test]

@@ -209,6 +209,20 @@ pub async fn read_conversation(id: String) -> Result<Vec<ChatMessageDto>, AppErr
     .map_err(|error| join_failed(&error.to_string()))?
 }
 
+/// 读取某个会话最后一次完整路线快照。旧会话没有快照时返回 `None`。
+///
+/// # Errors
+///
+/// 配置库读不出来或快照损坏时返回错误。
+#[tauri::command]
+pub async fn read_conversation_route(id: String) -> Result<Option<RoutePlan>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        conversations::read_route_snapshot(Store::open()?.conn(), &id)
+    })
+    .await
+    .map_err(|error| join_failed(&error.to_string()))?
+}
+
 /// 删掉一个会话。消息行由外键级联删掉。
 ///
 /// # Errors
@@ -371,7 +385,16 @@ fn run_stream(
         mcp: &mut mcp,
     };
 
+    let mut route_snapshot: Option<RoutePlan> = None;
     let mut sink = |event: AgentEvent| {
+        // 完整折线只在 tool 事件里存在；独立快照保存，绝不能塞进模型上下文摘要。
+        if let AgentEvent::ToolEnd {
+            payload: Some(ToolPayload::Plan(plan)),
+            ..
+        } = &event
+        {
+            route_snapshot = Some((**plan).clone());
+        }
         // `Done` 不在这里发：它要带落库后的消息，而落库发生在 `run_turn_streaming`
         // 返回之后。在这里转发会让前端先收到 `done` 再收到消息。
         if let Some(payload) = to_stream_event(event) {
@@ -383,6 +406,14 @@ fn run_stream(
     let payload = match outcome {
         Ok(turn) => match persist_turn(&prepared.conv_id, &turn.appended, &model.model) {
             Ok(messages) => {
+                if let Some(plan) = route_snapshot
+                    && let Err(error) = Store::open().and_then(|store| {
+                        conversations::save_route_snapshot(store.conn(), &prepared.conv_id, &plan)
+                    })
+                {
+                    // 快照仅用于重启后重绘地图；回答与消息已成功落库，不能因此向用户报失败。
+                    tracing::error!(%error, conversation = %prepared.conv_id, "保存路线快照失败，历史地图不可恢复");
+                }
                 tracing::info!(
                     conversation = %prepared.conv_id,
                     model = %model.model,

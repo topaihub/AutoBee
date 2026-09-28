@@ -137,6 +137,7 @@ function fakeClient(overrides: Partial<PlannerClient> = {}): PlannerClient {
     saveLlmModels: vi.fn(async () => []),
     listConversations: vi.fn(async () => []),
     readConversation: vi.fn(async () => []),
+    readConversationRoute: vi.fn(async () => null),
     deleteConversation: vi.fn(async () => undefined),
     chatStart: vi.fn(async () => ({
       streamId: "s1",
@@ -347,6 +348,21 @@ describe("ChatState", () => {
     expect(state.messages).toEqual([]);
     expect(state.error).toBe("库读不了");
     expect(state.loading).toBe(false);
+  });
+
+  it("重启后打开有路线快照的历史会恢复地图", async () => {
+    const client = fakeClient({
+      readConversation: vi.fn(async () => [message("m1", "c1", "user", "从光谷去汉口")]),
+      readConversationRoute: vi.fn(async () => chatPlan()),
+    });
+    const state = new ChatState(client);
+
+    await state.openConversation("c1");
+
+    expect(state.hasRouteResult).toBe(true);
+    expect(planner.plan?.routes[0]?.segments[0]?.points).toHaveLength(3);
+    expect(planner.fromText).toBe("光谷广场");
+    expect(planner.toText).toBe("汉口火车站");
   });
 
   it("删除当前会话后清空消息与当前 id", async () => {

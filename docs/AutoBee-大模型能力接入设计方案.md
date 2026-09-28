@@ -204,9 +204,11 @@ llm_models      一行 = 用户从该入口挑中的一个模型
 
 全部加进 `src-tauri/shell/src/credentials/schema.rs` 的 `CREATE` 常量(`IF NOT EXISTS`,每次开库无条件执行)。
 
-**`VERSION` 现已是 7,原文「保持 4 不变」与「加一到 5」都是过期的。** 实际演进:M1-1 把配置两表加进去时 `VERSION` 走到 5,M1 后续的百度双 AK 列把它推到 6,本轮加会话三表推到 7。`migrate` 里 `from < 7` 不需要动作(`CREATE` 的 `IF NOT EXISTS` 已把表补齐),但版本号必须往前走 —— 否则将来真要改写数据时无从判断这一版跑过没有。
+**`VERSION` 现已是 8。** 实际演进:M1-1 把配置两表加进去时 `VERSION` 走到 5,M1 后续的百度双 AK 列把它推到 6,会话三表推到 7,本轮为历史路线地图快照推到 8。`migrate` 里不需要动作(`CREATE` 的 `IF NOT EXISTS` 已把表补齐),但版本号必须往前走 —— 否则将来真要改写数据时无从判断这一版跑过没有。
 
-**外键开在 `prepare` 里、建表之前**(`schema.rs:99`,`execute_batch(CREATE)` 在 `:102`),不是 `store.rs` 的 `open_at`。理由见 M1-1 任务条,实测已验证。
+**完整折线只写展示快照，不写 `llm_messages`。** `llm_route_snapshots` 以 `conv_id` 为主键保存该会话最后一次成功 `plan_route` 的完整 `RoutePlan`，供关程序重开后重绘地图；它随会话外键级联删除，且永不作为模型上下文发送。`llm_messages.content` 仍只存裁剪摘要。
+
+外键开在 `prepare` 里、建表之前(`schema.rs:99`,`execute_batch(CREATE)` 在 `:102`),不是 `store.rs` 的 `open_at`。理由见 M1-1 任务条,实测已验证。
 
 ```sql
 CREATE TABLE IF NOT EXISTS llm_providers (
@@ -247,7 +249,13 @@ CREATE TABLE IF NOT EXISTS llm_messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_llm_messages_conv
-  ON llm_messages(conv_id, created_at);
+ ON llm_messages(conv_id, created_at);
+
+CREATE TABLE IF NOT EXISTS llm_route_snapshots (
+ conv_id TEXT PRIMARY KEY REFERENCES llm_conversations(id) ON DELETE CASCADE,
+ plan_json TEXT NOT NULL,
+ updated_at INTEGER NOT NULL
+);
 ```
 
 `ON DELETE CASCADE` 需要 `PRAGMA foreign_keys = ON`。**它已经开了**:`schema.rs:99`,在 `prepare` 里、`execute_batch(CREATE)` 之前。原文「当前 `Store::open_at` 没有开」是 M1-1 之前的状态,M1-1 已落地,11.1 的「破坏性改动」一节随之作废。

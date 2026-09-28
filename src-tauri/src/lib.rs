@@ -33,6 +33,7 @@ pub fn run() {
             commands::save_llm_models,
             commands::list_conversations,
             commands::read_conversation,
+            commands::read_conversation_route,
             commands::delete_conversation,
             commands::llm_chat_start,
             commands::llm_chat_cancel,
