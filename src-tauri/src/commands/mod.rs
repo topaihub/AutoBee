@@ -29,8 +29,12 @@
 /// 地图能力：服务商档案、界面偏好、联想、算路、瓦片、生活圈、日志。
 pub mod map;
 
-/// 大模型能力：服务入口档案、模型列表。
+/// 大模型能力：服务入口档案、模型列表、会话读写、对话一轮。
 pub mod llm;
+
+/// MCP：server 档案 CRUD、连上去列工具。
+pub mod mcp;
 
 pub use llm::*;
 pub use map::*;
+pub use mcp::*;

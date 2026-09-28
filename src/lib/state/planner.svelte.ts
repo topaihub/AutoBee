@@ -199,6 +199,25 @@ export class PlannerState {
       : "";
   }
 
+  /**
+   * 把一份算好的生活圈写进状态。`loadLifeCircle()` 与大模型工具调用共用这条路径。
+   *
+   * 会顺手把这一包勾上：`togglePackage` 按 `selectedPackages` 过滤 `circleResults`，
+   * 没勾的包一旦用户动了任何复选框就会被静默滤掉 —— 地图上的点没了，而用户
+   * 并没有取消过它。勾上同时也让复选框如实反映地图上画的是哪几包。
+   */
+  applyCircle(circle: LifeCircle): void {
+    if (!this.selectedPackages.includes(circle.package)) {
+      this.selectedPackages = [...this.selectedPackages, circle.package];
+    }
+    // 同一包重查就替换，不要并存两份。
+    this.circleResults = [
+      ...this.circleResults.filter((result) => result.package !== circle.package),
+      { package: circle.package, ok: true, circle },
+    ];
+    this.lifeCircleError = "";
+  }
+
   /** 选中某个方案；卡片点击与地图上的联动都走这里。 */
   selectRoute(id: string): void {
     this.selectedRouteId = id;

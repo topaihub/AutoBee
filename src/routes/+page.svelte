@@ -14,8 +14,9 @@
   import MapCanvas from "$lib/components/app/MapCanvas.svelte";
   import SettingsDialog from "$lib/components/app/SettingsDialog.svelte";
   import LogPanel from "$lib/components/app/LogPanel.svelte";
+  import ChatPanel from "$lib/components/ChatPanel.svelte";
   import { providers } from "$lib/state/providers.svelte";
-  type View = "route" | "circle" | "logs";
+  type View = "route" | "circle" | "chat" | "logs";
   let settingsOpen = $state(false);
   let view = $state<View>("route");
   /** 日志视图默认不占位，设置里打开才出现（见 SettingsDto.show_logs）。 */
@@ -77,6 +78,7 @@
     <nav class="ml-4 flex items-center gap-1 rounded-lg bg-muted p-1" aria-label="功能模式">
       <button type="button" class={cn("rounded-md px-3 py-1.5 text-xs font-medium transition-colors", view === "route" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")} aria-pressed={view === "route"} onclick={() => selectView("route")}>安心换乘</button>
       <button type="button" class={cn("rounded-md px-3 py-1.5 text-xs font-medium transition-colors", view === "circle" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")} aria-pressed={view === "circle"} onclick={() => selectView("circle")}>15 分钟生活圈</button>
+      <button type="button" class={cn("rounded-md px-3 py-1.5 text-xs font-medium transition-colors", view === "chat" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")} aria-pressed={view === "chat"} onclick={() => selectView("chat")}>问一问</button>
       {#if showLogs}
         <button type="button" class={cn("rounded-md px-3 py-1.5 text-xs font-medium transition-colors", view === "logs" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")} aria-pressed={view === "logs"} onclick={() => selectView("logs")}>日志</button>
       {/if}
@@ -93,7 +95,10 @@
     </div>
   </header>
 
-  {#if view === "logs"}
+  {#if view === "chat"}
+    <!-- 对话占满：气泡流与会话列表都要宽度，挤在侧栏里没法读。 -->
+    <ChatPanel />
+  {:else if view === "logs"}
     <!-- 日志占满：每行都长，挤在 400px 侧栏里全是折行。 -->
     <LogPanel />
   {:else}

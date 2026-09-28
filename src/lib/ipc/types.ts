@@ -255,9 +255,12 @@ export type ModelRef = {
 /**
  * 流式事件的载荷，事件名 `llm:chat:<streamId>`。
  *
- * `toolEnd` 上的 `plan` / `circle` 是**未裁剪**的原始结构，只给地图用，
- * 不发回模型（§6.4.2 的两条路径）。`summary` 是给人看的一句话，
+ * `summary` 是给人看的一句话（如「找到 3 条路线」），**不是原始 JSON**，
  * 前端不该去解析它。
+ *
+ * `toolEnd` 的 `plan` / `circle` 是 §6.4.2 的回灌载荷，**未经裁剪**:发回模型的
+ * JSON 不含折线点（省上下文），这两个字段带的是原始结构，地图要折线才画得出线。
+ * 只在对应工具**成功**时出现 —— 失败、截断、以及 `search_place` 都没有。
  */
 export type ChatStreamEvent =
   | { kind: "delta"; text: string }
@@ -267,11 +270,26 @@ export type ChatStreamEvent =
       tool: string;
       ok: boolean;
       summary: string;
-      plan?: RoutePlan | null;
-      circle?: LifeCircle | null;
+      plan?: RoutePlan;
+      circle?: LifeCircle;
     }
-  | { kind: "done"; messageId: string }
+  | { kind: "done"; messages: ChatMessage[] }
   | { kind: "error"; code: string; message: string };
+
+/**
+ * `chatStart` 的立即返回值。
+ *
+ * `convId` 必须带回来：首轮是后端新建的，前端不知道该往哪个会话追加。
+ * `userMessage` 是已落库的那条用户消息，用来替换乐观气泡（拿到真实 id 与时间）。
+ *
+ * 这两个字段**不随成功事件下发**：上游失败时压根没有成功事件，而用户那句话
+ * 已经落库了。少了它们，下一句会再新建一个会话，库里于是攒下一串孤立会话。
+ */
+export type ChatStartHandle = {
+  streamId: string;
+  convId: string;
+  userMessage: ChatMessage;
+};
 
 /** 一个 MCP server。`toolCount` 是上次成功 `tools/list` 拿到的条数，null = 还没连上过。 */
 export type McpServer = {

@@ -222,7 +222,6 @@ fn now_secs() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
-
 fn sql(doing: &str, error: &rusqlite::Error) -> AppError {
     tracing::error!(%error, doing, "会话记录库操作失败");
     AppError::new("DB_ERROR", format!("会话记录{doing}失败：{error}"), 500)
@@ -254,7 +253,16 @@ mod tests {
         let conv = create_conversation(&conn, "路线").unwrap();
 
         append_message(&conn, &conv, "user", "从北京到天津", None, None, None).unwrap();
-        append_message(&conn, &conv, "assistant", "好的", None, None, Some("gpt-4o")).unwrap();
+        append_message(
+            &conn,
+            &conv,
+            "assistant",
+            "好的",
+            None,
+            None,
+            Some("gpt-4o"),
+        )
+        .unwrap();
         append_message(&conn, &conv, "user", "改走高速", None, None, None).unwrap();
 
         let rows = read_conversation(&conn, &conv).unwrap();
@@ -270,7 +278,11 @@ mod tests {
         let b = create_conversation(&conn, "B").unwrap();
         钉住会话时间(&conn, &a, 1_000);
         钉住会话时间(&conn, &b, 2_000);
-        assert_eq!(list_conversations(&conn).unwrap()[0].id, b, "B 更新，先排 B");
+        assert_eq!(
+            list_conversations(&conn).unwrap()[0].id,
+            b,
+            "B 更新，先排 B"
+        );
 
         append_message(&conn, &a, "user", "还在吗", None, None, None).unwrap();
 
@@ -309,7 +321,11 @@ mod tests {
 
         assert_eq!(title.chars().count(), TITLE_CHARS + 1, "20 字 + 省略号");
         assert_eq!(title, "从北京市海淀区中关村出发到天津市滨海新区…");
-        assert_eq!(title_from_first_message("  \n 短句 \t"), "短句", "首尾空白去掉");
+        assert_eq!(
+            title_from_first_message("  \n 短句 \t"),
+            "短句",
+            "首尾空白去掉"
+        );
         assert_eq!(title_from_first_message(" \t\n "), DEFAULT_TITLE);
         assert_eq!(title_from_first_message(""), DEFAULT_TITLE);
         // 刚好 20 字：不该补省略号，否则用户会以为标题被截了。
@@ -354,6 +370,12 @@ mod tests {
         assert_eq!(rows[1].id, 结果.id, "tool 轮在后");
         assert_eq!(rows[0].role, "assistant");
         assert_eq!(rows[1].tool_name.as_deref(), Some("plan_route"));
-        assert!(rows[0].tool_calls.as_deref().unwrap().contains("plan_route"));
+        assert!(
+            rows[0]
+                .tool_calls
+                .as_deref()
+                .unwrap()
+                .contains("plan_route")
+        );
     }
 }

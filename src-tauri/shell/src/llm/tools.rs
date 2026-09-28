@@ -48,8 +48,8 @@ pub fn tool_schemas() -> Vec<Value> {
         json!({
             "name": PLAN_ROUTE,
             "description": "规划两点之间的公共交通或步行路线。起点与终点既可以写地名（如「武汉光谷广场」），\
-也可以写「纬度,经度」——顺序是纬度在前、经度在后（如「30.5,114.4」）。返回每条候选方案的总距离、\
-总耗时、票价与分段乘车信息；折线坐标不返回，每段只给点数（pointCount）与首末点。",
+        也可以写「纬度,经度」——顺序是纬度在前、经度在后（如「30.5,114.4」）。返回每条候选方案的总距离、\
+        总耗时、票价与分段乘车信息；折线坐标不返回，每段只给点数（pointCount）与首末点。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -78,7 +78,7 @@ pub fn tool_schemas() -> Vec<Value> {
         json!({
             "name": SEARCH_PLACE,
             "description": "按关键词搜索地点，拿到标准名称与坐标（纬度 lat、经度 lng）。\
-地名可能重名或写错，规划路线前先用它确认；搜不到时返回一句提示而不是报错，结果可能为空。",
+        地名可能重名或写错，规划路线前先用它确认；搜不到时返回一句提示而不是报错，结果可能为空。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -99,7 +99,7 @@ pub fn tool_schemas() -> Vec<Value> {
         json!({
             "name": LIFE_CIRCLE,
             "description": "查询一个坐标点周围真实步行 15 分钟内可达的生活服务点位（医院、药店、公园等），\
-按步行时间升序返回。坐标用纬度 lat 与经度 lng 两个数字分别给出。",
+        按步行时间升序返回。坐标用纬度 lat 与经度 lng 两个数字分别给出。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -122,23 +122,56 @@ pub fn tool_schemas() -> Vec<Value> {
     ]
 }
 
-/// 执行一次工具调用，返回直接喂回模型的字符串。
+/// 一次工具调用的两份产物。
+///
+/// 存在两份是 6.4.2 的要求,不是冗余:发回模型的 JSON 不含折线点(省上下文),
+/// 而地图要折线才画得出线。工具只执行一次,裁剪版进 messages,完整版随
+/// `toolEnd` 事件回前端。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolOutcome {
+    /// 喂回模型的字符串,已按 [`MAX_OUTPUT_CHARS`] 裁剪。
+    pub summary: String,
+    /// 给地图的原始结构。`search_place` 没有 —— 它是中间步骤,
+    /// 画一堆候选点只会干扰。
+    pub payload: Option<ToolPayload>,
+}
+
+/// 可回灌进 `planner` 的结构化结果。
+///
+/// 用 enum 而不是两个 `Option` 字段:一次工具调用不可能同时产出路线和生活圈,
+/// 两个 `Option` 会让「都是 Some」这种不可能状态可被表达。
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToolPayload {
+    /// 写 `planner.plan` 与 `planner.selectedRouteId`。
+    Plan(Box<RoutePlan>),
+    /// 写 `planner.circleResults`。
+    Circle(Box<LifeCircle>),
+}
+
+impl ToolOutcome {
+    /// 只有文字、没有可回灌结构的结果。
+    fn text(summary: String) -> Self {
+        Self {
+            summary,
+            payload: None,
+        }
+    }
+}
+
+/// 执行一次工具调用。
 ///
 /// # Errors
 ///
-/// 工具名未知、`arguments` 不是合法 JSON、枚举参数不认识、缺少所需 Key，
+/// 工具名未知、`arguments` 不是合法 JSON、枚举参数不认识、缺少所需 Key,
 /// 以及底层地图服务失败时返回错误。
-pub fn dispatch(config: &Config, name: &str, arguments: &str) -> Result<String, AppError> {
+pub fn dispatch(config: &Config, name: &str, arguments: &str) -> Result<ToolOutcome, AppError> {
     match name {
         PLAN_ROUTE => run_plan_route(config, arguments),
         SEARCH_PLACE => run_search_place(config, arguments),
         LIFE_CIRCLE => run_life_circle(config, arguments),
         _ => Err(AppError::new(
             "UNKNOWN_TOOL",
-            format!(
-                "没有名为「{name}」的工具,可用:{}",
-                TOOL_NAMES.join(" / ")
-            ),
+            format!("没有名为「{name}」的工具,可用:{}", TOOL_NAMES.join(" / ")),
             400,
         )),
     }
@@ -166,7 +199,7 @@ struct LifeCircleArgs {
     crs: Option<String>,
 }
 
-fn run_plan_route(config: &Config, arguments: &str) -> Result<String, AppError> {
+fn run_plan_route(config: &Config, arguments: &str) -> Result<ToolOutcome, AppError> {
     let args: PlanRouteArgs = parse_args(PLAN_ROUTE, arguments)?;
     let query = RouteQuery {
         from: args.from,
@@ -174,21 +207,28 @@ fn run_plan_route(config: &Config, arguments: &str) -> Result<String, AppError> 
         mode: parse_mode(&args.mode)?,
         sort: parse_sort(&args.sort)?,
     };
-    encode(&trim_plan(&core_plan_route(config, &query)?))
+    let plan = core_plan_route(config, &query)?;
+    Ok(ToolOutcome {
+        summary: encode(&trim_plan(&plan))?,
+        payload: Some(ToolPayload::Plan(Box::new(plan))),
+    })
 }
 
-fn run_search_place(config: &Config, arguments: &str) -> Result<String, AppError> {
+fn run_search_place(config: &Config, arguments: &str) -> Result<ToolOutcome, AppError> {
     let args: SearchPlaceArgs = parse_args(SEARCH_PLACE, arguments)?;
     // 缺省 8 条与界面联想一致；上限 20 是防模型要一屏用不完的数据。
     let limit = args.limit.unwrap_or(8).clamp(1, 20);
     let hits = suggest_places(config, &args.keyword, limit);
     if hits.is_empty() {
-        return Ok(EMPTY_SEARCH_HINT.to_string());
+        return Ok(ToolOutcome::text(EMPTY_SEARCH_HINT.to_string()));
     }
-    encode(&Value::Array(hits.iter().map(trim_place).collect()))
+    // 不带 payload:候选点是中间步骤,画上地图只会干扰(6.4.2)。
+    Ok(ToolOutcome::text(encode(&Value::Array(
+        hits.iter().map(trim_place).collect(),
+    ))?))
 }
 
-fn run_life_circle(config: &Config, arguments: &str) -> Result<String, AppError> {
+fn run_life_circle(config: &Config, arguments: &str) -> Result<ToolOutcome, AppError> {
     let args: LifeCircleArgs = parse_args(LIFE_CIRCLE, arguments)?;
     let package = parse_package(&args.package)?;
     // 省略 crs 时按系统输出坐标系解释:plan_route / search_place 给模型的坐标就是这个系,
@@ -214,7 +254,10 @@ fn run_life_circle(config: &Config, arguments: &str) -> Result<String, AppError>
         poi.location = convert(poi.location, Crs::Bd09, crs);
     }
     circle.crs = crs;
-    encode(&trim_circle(&circle))
+    Ok(ToolOutcome {
+        summary: encode(&trim_circle(&circle))?,
+        payload: Some(ToolPayload::Circle(Box::new(circle))),
+    })
 }
 
 fn parse_args<T: DeserializeOwned>(tool: &str, arguments: &str) -> Result<T, AppError> {
@@ -276,10 +319,7 @@ fn parse_crs(text: &str) -> Result<Crs, AppError> {
     Crs::parse(text).ok_or_else(|| {
         AppError::new(
             "BAD_CRS",
-            format!(
-                "不认识的起点坐标系「{text}」,可选:{}",
-                Crs::ALL.join(" / ")
-            ),
+            format!("不认识的起点坐标系「{text}」,可选:{}", Crs::ALL.join(" / ")),
             400,
         )
     })
@@ -671,7 +711,9 @@ mod tests {
     fn empty_search_returns_hint_not_empty_array() {
         // 没有任何 Key 的配置必然搜不到，正好覆盖空结果分支且不发网络请求。
         let out = dispatch(&Config::default(), SEARCH_PLACE, r#"{"keyword":"光谷"}"#).unwrap();
-        assert_eq!(out, EMPTY_SEARCH_HINT);
+        assert_eq!(out.summary, EMPTY_SEARCH_HINT);
+        // 候选点不回灌地图（6.4.2）。
+        assert_eq!(out.payload, None);
     }
 
     #[test]

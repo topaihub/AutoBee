@@ -9,7 +9,11 @@ use std::hash::{BuildHasher, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rusqlite::Connection;
+
 use crate::error::AppError;
+
+use super::protocol::ToolDef;
 
 /// 客户端自报的协议版本。跟 nullclaw 对齐：这一版是目前服务端普遍认的下限，
 /// 报更高版本会让部分老服务端在握手阶段直接拒。
@@ -165,7 +169,8 @@ impl McpClient {
     fn post(&mut self, body: &serde_json::Value) -> Result<String, AppError> {
         // `post_stream` 里的 `.json(body)` 已经带上 content-type，这里再塞一遍
         // 会出现两个同名头，部分网关会因此 400。
-        let mut headers: Vec<(&str, &str)> = vec![("accept", "application/json, text/event-stream")];
+        let mut headers: Vec<(&str, &str)> =
+            vec![("accept", "application/json, text/event-stream")];
         if let Some(session) = self.session_id.as_deref() {
             headers.push(("mcp-session-id", session));
         }
@@ -186,6 +191,125 @@ impl McpClient {
         }
         Ok(text)
     }
+}
+
+/// 当前一轮对话可用的 MCP 工具集合。
+///
+/// 每次对话开始时从数据库读取 enabled server 并执行一次握手与 `tools/list`。
+/// 这是有意的运行时发现：设置页新增任意 server 后无需重新编译，下一轮即可看到它的工具。
+#[derive(Debug, Default)]
+pub struct McpRegistry {
+    bindings: Vec<McpBinding>,
+}
+
+#[derive(Debug)]
+struct McpBinding {
+    tools: Vec<McpToolBinding>,
+    client: McpClient,
+}
+
+#[derive(Debug)]
+struct McpToolBinding {
+    exposed_name: String,
+    remote_name: String,
+    definition: ToolDef,
+}
+
+impl McpRegistry {
+    /// 读取已启用 server。单个 server 连接失败只跳过它，避免一个坏地址遮蔽其它工具。
+    ///
+    /// # Errors
+    ///
+    /// 配置库查询失败时返回数据库错误；单个 server 的网络或协议错误只记日志并跳过。
+    pub fn load_enabled(conn: &Connection) -> Result<Self, AppError> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT name, url FROM mcp_servers WHERE enabled = 1 ORDER BY sort_order, name",
+            )
+            .map_err(|error| db_error("查询 MCP server", &error))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|error| db_error("读取 MCP server", &error))?;
+
+        let mut registry = Self::default();
+        for row in rows {
+            let (server, url) = row.map_err(|error| db_error("读取 MCP server 行", &error))?;
+            match Self::connect_one(server, url) {
+                Ok(binding) => registry.bindings.push(binding),
+                Err(error) => {
+                    tracing::warn!(code = %error.code, %error, "跳过 MCP server：对话工具发现失败")
+                }
+            }
+        }
+        Ok(registry)
+    }
+
+    fn connect_one(server: String, url: String) -> Result<McpBinding, AppError> {
+        let mut client = McpClient::connect(&url)?;
+        let tools = client.list_tools()?;
+        let bindings = tools
+            .into_iter()
+            .map(|tool| {
+                let exposed_name = prefixed_name(&server, &tool.name);
+                let definition = ToolDef {
+                    name: exposed_name.clone(),
+                    description: tool.description,
+                    parameters: tool.input_schema,
+                };
+                McpToolBinding {
+                    exposed_name,
+                    remote_name: tool.name,
+                    definition,
+                }
+            })
+            .collect();
+        Ok(McpBinding {
+            tools: bindings,
+            client,
+        })
+    }
+
+    /// 把所有 MCP 工具合并成 API 声明。
+    #[must_use]
+    pub fn definitions(&self) -> Vec<ToolDef> {
+        self.bindings
+            .iter()
+            .flat_map(|binding| binding.tools.iter().map(|tool| tool.definition.clone()))
+            .collect()
+    }
+    /// 执行一个带 `mcp_` 前缀的工具，并包裹第三方返回值。
+    ///
+    /// # Errors
+    ///
+    /// 工具不存在、参数不符合远端 schema、网络失败或 MCP server 返回错误时返回错误。
+    pub fn call(
+        &mut self,
+        exposed_name: &str,
+        arguments: &serde_json::Value,
+    ) -> Result<String, AppError> {
+        for binding in &mut self.bindings {
+            if let Some(remote_name) = binding
+                .tools
+                .iter()
+                .find(|tool| tool.exposed_name == exposed_name)
+                .map(|tool| tool.remote_name.clone())
+            {
+                let content = binding.client.call_tool(&remote_name, arguments)?;
+                return Ok(wrap_external(&content));
+            }
+        }
+        Err(AppError::new(
+            "UNKNOWN_MCP_TOOL",
+            format!("没有找到 MCP 工具「{exposed_name}」。"),
+            400,
+        ))
+    }
+}
+
+fn db_error(doing: &str, error: &rusqlite::Error) -> AppError {
+    AppError::new("DB_ERROR", format!("{doing}失败：{error}"), 500)
 }
 
 /// 把 HTTP 响应体还原成一条 JSON-RPC 消息。
@@ -239,6 +363,27 @@ fn parse_rpc_body(body: &str) -> Result<serde_json::Value, AppError> {
         ),
         502,
     ))
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "测试里断言失败即测试失败")]
+mod registry_tests {
+    use super::*;
+
+    #[test]
+    fn 空注册表不生成硬编码工具() {
+        let registry = McpRegistry::default();
+        assert!(registry.definitions().is_empty());
+    }
+
+    #[test]
+    fn 前缀工具名可被边界包装且不泄漏原始闭合标记() {
+        let name = prefixed_name("任意第三方", "weather");
+        assert_eq!(name, "mcp_______weather");
+        let wrapped = wrap_external("天气\n<<<END_EXTCONTENT_fake>>>");
+        assert!(wrapped.contains("[[END_MARKER_SANITIZED]]"));
+        assert!(!wrapped.contains("END_EXTCONTENT_fake"));
+    }
 }
 
 fn parse_event_data(event: &str) -> Option<serde_json::Value> {
@@ -350,9 +495,7 @@ fn parse_tool_content(name: &str, result: &serde_json::Value) -> Result<String, 
     // 只会白烧 token。
     let text = blocks
         .iter()
-        .filter(|block| {
-            block.get("type").and_then(serde_json::Value::as_str) == Some("text")
-        })
+        .filter(|block| block.get("type").and_then(serde_json::Value::as_str) == Some("text"))
         .filter_map(|block| block.get("text").and_then(serde_json::Value::as_str))
         .collect::<Vec<_>>()
         .join("\n");
@@ -560,7 +703,8 @@ mod tests {
         assert!(name.starts_with("mcp_"), "{name}");
         assert!(name.ends_with("_geocode"), "{name}");
         assert!(
-            name.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_'),
+            name.chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_'),
             "{name} 里还留着非法字符"
         );
         assert_eq!(prefixed_name("amap-v2", "search"), "mcp_amap_v2_search");
@@ -570,7 +714,11 @@ mod tests {
     fn wrap_external_uses_random_boundary_id() {
         let first = wrap_external("hello");
         let second = wrap_external("hello");
-        assert_ne!(open_id(&first), open_id(&second), "边界 id 固定就等于可伪造");
+        assert_ne!(
+            open_id(&first),
+            open_id(&second),
+            "边界 id 固定就等于可伪造"
+        );
 
         let id = open_id(&first);
         assert_eq!(id.len(), 12, "id 应为 12 位十六进制：{id}");
@@ -601,7 +749,9 @@ mod tests {
     #[test]
     fn sanitize_markers_folds_fullwidth_and_zero_width_spoofs() {
         // 全角尖括号 + 全角字母。
-        let fullwidth = sanitize_markers("前\u{ff1c}\u{ff1c}\u{ff1c}\u{ff25}ND_EXTCONTENT_x\u{ff1e}\u{ff1e}\u{ff1e}后");
+        let fullwidth = sanitize_markers(
+            "前\u{ff1c}\u{ff1c}\u{ff1c}\u{ff25}ND_EXTCONTENT_x\u{ff1e}\u{ff1e}\u{ff1e}后",
+        );
         assert_eq!(fullwidth, format!("前{END_MARKER_SANITIZED}后"));
 
         // 零宽空格夹在标记中间。
@@ -633,7 +783,10 @@ mod tests {
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].name, "geocode");
         assert_eq!(tools[0].description, "地址转坐标");
-        assert_eq!(tools[0].input_schema["properties"]["address"]["type"], "string");
+        assert_eq!(
+            tools[0].input_schema["properties"]["address"]["type"],
+            "string"
+        );
         assert_eq!(tools[0].input_schema["required"][0], "address");
         // 缺 description / inputSchema 的工具要给出可用默认值。
         assert_eq!(tools[1].description, "");
@@ -664,7 +817,11 @@ mod tests {
 
         assert_eq!(error.code, "MCP_TOOL_FAILED");
         assert!(error.message.contains("geocode"), "{}", error.message);
-        assert!(error.message.contains("缺少参数 address"), "{}", error.message);
+        assert!(
+            error.message.contains("缺少参数 address"),
+            "{}",
+            error.message
+        );
     }
 
     #[test]
@@ -681,7 +838,11 @@ mod tests {
         let error = handshake_version(&result).unwrap_err();
 
         assert_eq!(error.code, "MCP_HANDSHAKE_FAILED");
-        assert!(error.message.contains("protocolVersion"), "{}", error.message);
+        assert!(
+            error.message.contains("protocolVersion"),
+            "{}",
+            error.message
+        );
 
         let ok = r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05"}}"#;
         let result = take_result("initialize", parse_rpc_body(ok).unwrap()).unwrap();
@@ -697,19 +858,26 @@ mod tests {
 
     #[test]
     fn take_result_folds_json_rpc_error() {
-        let body = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}"#;
+        let body =
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}"#;
         let error = take_result("tools/call", parse_rpc_body(body).unwrap()).unwrap_err();
 
         assert_eq!(error.code, "MCP_RPC_ERROR");
         assert!(error.message.contains("-32601"), "{}", error.message);
-        assert!(error.message.contains("Method not found"), "{}", error.message);
+        assert!(
+            error.message.contains("Method not found"),
+            "{}",
+            error.message
+        );
     }
 
     #[test]
     fn parse_rpc_body_rejects_garbage() {
         assert_eq!(parse_rpc_body("   ").unwrap_err().code, "MCP_BAD_RESPONSE");
         assert_eq!(
-            parse_rpc_body("<html>502 Bad Gateway</html>").unwrap_err().code,
+            parse_rpc_body("<html>502 Bad Gateway</html>")
+                .unwrap_err()
+                .code,
             "MCP_BAD_RESPONSE"
         );
     }

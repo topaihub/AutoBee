@@ -34,6 +34,12 @@ autobee-shell = { path = "shell" }
 # `tauri build` 会校验两边的 major/minor，写 "2" 时两边会各自漂开。
 tauri = { version = "2.11.5", features = [] }
 
+# MCP server 档案的 DTO 与 CRUD 在 command 层（`commands/mcp.rs`），会话消息的
+# tool_calls 列是 JSON 串，读写都在 `commands/llm.rs`。
+# 三者都已在 shell 的依赖图里，这里声明不增加任何编译量或供应链面。
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.40", features = ["bundled"] }
 tracing = "0.1"
 
 # 瓦片以 base64 下发：IPC 的 JSON  serializer 会把 Vec<u8> 变成数字数组

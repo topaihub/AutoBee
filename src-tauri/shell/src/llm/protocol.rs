@@ -18,6 +18,19 @@ const ANTHROPIC_VERSION: &str = "2023-06-01";
 /// 给得太小会让长回答被截断成 [`TurnOutcome::Truncated`]，取一个当前各模型都支持的上限。
 const ANTHROPIC_MAX_TOKENS: u32 = 8192;
 
+/// 一个上游入口：打哪儿、按什么协议、用什么密钥、调哪个模型。
+///
+/// 这四项永远同时出现、永远同时变，拆成四个参数只会让每个调用点都多抄三行，还给
+/// 「协议和 base_url 配错对」留了空子。
+#[derive(Debug, Clone, Copy)]
+pub struct Upstream<'a> {
+    pub base_url: &'a str,
+    pub protocol: LlmProtocol,
+    /// 明文密钥。只在本次调用期间借用，不落库不打日志。
+    pub api_key: &'a str,
+    pub model: &'a str,
+}
+
 /// 一个可供模型调用的工具声明。
 ///
 /// `parameters` 是 JSON Schema 对象，原样透给上游 —— 各家对 schema 的支持子集不同，

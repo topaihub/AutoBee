@@ -707,12 +707,18 @@ AutoBee 取**随机** hex boundary id:确定性 id 可被第三方预测,而 MCP
   - **三种协议全做了**,不是原文的「只实现 `openai-chat` 一种」:三者的差异只有端点路径、消息体形状、tool 声明字段三处,集中在 `protocol.rs` 里一次写完比留两个将来补要省。但 **tool calling 只有 `openai-chat` 支持**,另两个协议传了非空 `tools` 会报 `TOOLS_UNSUPPORTED` 而不是静默丢掉 —— 静默丢掉的后果是模型答得像在用工具但其实没调用。
   - **截断的统一折叠**:`openai-chat` 的 `finish_reason == "length"`、`openai-responses` 的 `status == "incomplete"`、`anthropic` 的 `stop_reason == "max_tokens"` 三者都折成 `TurnOutcome::Truncated`,不折成 `ToolCalls`。M3-2 依赖这一层区分来整批作废。
   - 判据实测:`cargo test -p autobee-shell` **111 passed / 0 failed**,clippy `-D warnings` **0 问题**(确认输出含 `Checking autobee-shell`,非缓存空转)。单测只覆盖请求体拼装与响应解析,不发真请求。
-- [ ] **M2-3 `llm_chat_start` 非流式版**
-  - 直接返回完整回复字符串,不发 event。`convId` 为 `None` 时新建会话,标题取用户首句前 20 字(6.2)。
-  - 判据:能与模型来回对话。
-- [ ] **M2-4 对话页最小实现**
-  - `ChatPanel.svelte` + `ChatBubble.svelte`,`chat.svelte.ts` 持状态。`+page.svelte` 的 `View` 加 `"chat"`,nav 加第四个按钮。
-  - 判据:关程序重开,历史对话还在。
+- [x] **M2-3 `llm_chat_start` 非流式版**(已完成 2026-09-24,**后被 M4-3 取代**)
+  - 当时按原文实现:返回 `ChatStartResult { convId, reply, messages }`,不发 event。
+  - **M4-3 已把它切成流式**,返回值换成 `ChatStartHandle { streamId, convId, userMessage }`,
+    正文走 event。非流式那条路**没有留下兼容壳**(清一次到底),所以这一条的产物
+    如今只以「`run_turn` 这个非流式入口仍在,被单测用来钉回合循环」的形式存在。
+  - 判据「能与模型来回对话」**要真实 Key,我没跑过**。代码路径由 M4-3 的 115 条
+    前端单测与 229 条 Rust 单测覆盖,但那不等于判据过了。
+- [x] **M2-4 对话页最小实现**(已完成 2026-09-24)
+  - `ChatPanel.svelte` + `ChatBubble.svelte`,`chat.svelte.ts` 持状态。`+page.svelte` 的
+    `View` 加 `"chat"`,nav 加第四个按钮(顺序:安心换乘 → 生活圈 → AI 助手 → 日志)。
+  - 判据「关程序重开,历史对话还在」**要真实窗口,我没跑过**。会话读写有单测,
+    但「关掉进程再开」这一步单测碰不到。
 
 ### M3 tool calling(核心)
 
@@ -725,19 +731,28 @@ AutoBee 取**随机** hex boundary id:确定性 id 可被第三方预测,而 MCP
   - **不认识的 `mode` / `sort` / `package` 报错,不兜底成默认值。** 兜底的后果是模型分辨不出自己拿到的是「按它要求算的」还是「按默认参数算的」,也就无从重试。
   - 裁剪:丢掉 `Segment.points` 只留 `pointCount` 与首末点,`routes` 最多 3 条,`pois` 每类最多 5 个,`crs` 保留且无 `skip_serializing_if`。整体上限 8000 字符,切点先对齐 `char_boundary` 再回退到最近换行 —— 按字节切会把一个汉字劈成两半,模型收到的是乱码而不是截断。
   - 判据实测:`cargo test -p autobee-shell` **111 passed / 0 failed**。含 schema enum 与 `TravelMode::ALL` 逐字相等、裁剪后 `points` 不存在而 `crs` 存在两条。
-- [ ] **M3-2 `llm/agent.rs` 回合循环**
-  - 轮次上限 5;达上限仍要求调工具则停下并告知用户,不无限循环。
-  - tool 报错也回灌:`AppError` 的 `code` + 中文 `message` 直接序列化发回,让模型换参数重试(5.5)。
-  - **`finish_reason == "length"` 时整批 tool call 作废,一个都不执行**,每个都作为错误回灌。照 pi `agent-loop.ts:262-270`(判断)与 `475-500`(处理),原文的 `468-482` 是过期行号。这条不做就会出现「参数被截在 `{"from":"孝陵卫","to":"南京南"`,补全后是个真实地名,算出一条去错地方的路线并自信报给用户」—— 5.5 记的那个无声错误。
-  - `route-core` 是 blocking 的,tool 执行走 `spawn_blocking`,不改 core 为 async(1.2 非目标)。
-  - 判据:单测三条 —— 轮次上限触发时返回那句提示而非继续循环;tool 返回 `Err` 时 messages 里出现 role=tool 的错误项;`stopReason == "length"` 时执行过的 tool 数为 0。第三条必须有,它是唯一能挡住那个无声错误的东西。
-- [ ] **M3-3 `http.rs` 加 tools 字段**
-  - 请求体加 `tools`,解析响应的 `tool_calls`。只实现 `openai-chat`;另两个协议的 tool 分支返回「该协议暂不支持工具调用」,纯对话仍可用(5.6)。
-  - 判据:`pnpm verify` 全绿。
-- [ ] **M3-4 system prompt 坐标系硬约束**
-  - 加一条:回答中不出现裸经纬度数字,地点一律用名称指代(5.3 第 3 条)。
-  - tool description 里写明坐标仅用于再次调用工具(5.3 第 2 条)。
-  - 判据:问「孝陵卫地铁站到南京南站怎么走」,模型给的时长与步行米数**与直接点规划的结果一致**;回答里不出现经纬度数字。两条都要看,只看第二条会漏掉「模型编了个好看的时长」。
+- [x] **M3-2 `llm/agent.rs` 回合循环**(已完成 2026-09-24)
+  - 轮次上限 5;达上限仍要求调工具则停下并告知用户。tool 报错回灌而不中断本轮。
+  - **`Truncated` 整批作废,一个都不执行**,每个都作为错误回灌。
+  - `run_loop` 不碰 IO:`ask` 与 `exec` 都是闭包入参,所以「截断的调用是否真的没执行」
+    能被单测直接断言,不必靠真实 Key 跑一次去看。
+  - 判据实测:三条单测全在且全过 —— `轮次上限触发时给出提示而不是继续循环`、
+    `工具报错作为_tool_消息回灌而不中断本轮`、`截断时整批工具调用一个都不执行`
+    (后者断言 `executed == []` 且两个调用都作为 `ToolEnd{ok:false}` 回灌)。
+  - **另补一条原文没要求的**:`循环自己不发_delta_只发_done`。它钉住「正文只由 `ask` 发」
+    这条不变式 —— 破坏后果是界面正文重复一遍。已实测:故意在 `run_loop` 里补一个
+    `Delta` 后该测试 FAILED(`left: 1, right: 0`),改回即过。
+- [x] **M3-3 `http.rs` 加 tools 字段**(已完成 2026-09-24,落点是 `protocol.rs`)
+  - 请求体加 `tools`、解析 `tool_calls` 实际由 `protocol.rs` 的 `build_body` 承担
+    (M2-2 已把协议差异集中到那里,再开一个 `http.rs` 分支会让同一件事有两处真相)。
+  - 另两个协议传非空 `tools` 报 `TOOLS_UNSUPPORTED`,不静默丢掉。
+  - 判据实测:`pnpm verify` 全绿(svelte-check 0 error / vitest 115 passed / Rust 229 passed)。
+- [x] **M3-4 system prompt 坐标系硬约束**(已完成 2026-09-24)
+  - `SYSTEM_PROMPT` 第 2 条写明不得把坐标念给用户,理由(不同服务商坐标系不同、
+    百米级误导且无法被发现)也写在 prompt 里 —— 只下命令不给理由的约束模型更容易违反。
+  - 判据:`system_prompt_含坐标系硬约束` 单测钉住那句话在。但**判据的实质部分
+    (「模型给的时长与直接点规划的结果一致」)要真实 Key,我没跑过** —— 单测只能
+    证明约束写进去了,证明不了模型遵守它。
 
 ### M4 流式
 
@@ -749,15 +764,61 @@ AutoBee 取**随机** hex boundary id:确定性 id 可被第三方预测,而 MCP
   - 真正的理由:`core/src/http.rs` 整个是 `reqwest::blocking`,模块文档第 3-5 行写明「引 async 会把 `async` 传染到每个 adapter 与每个单测,换不来吞吐」。走 async SSE 会把地图侧几十个调用点一起拖进去。
   - 改用:`reqwest::blocking::Response` 实现了 `std::io::Read`,在 `spawn_blocking` 里按块读;SSE 解析做成**纯状态机**(喂任意切分的字节块),跨 chunk 断行照样可测。已落地 `core/src/http.rs` 的 `post_stream`(返回未读 `Response`)与长超时客户端 `LLM_CLIENT`(600 秒 —— 地图的 10 秒对大模型是必然超时)。
   - 判据实测:`cargo tree` 里没有第二个 async runtime,而且是因为压根没加。`route-core` clippy `-D warnings` 0 问题(确认 `Checking route-core` 真实重编,非缓存)。
-- [ ] **M4-2 SSE 解析**
-  - `http.rs` 改 `bytes_stream` + 手写逐行解析。
-  - 判据:单测喂一段真实 SSE 文本(含跨 chunk 切断的行),断言拼出的完整内容 —— 跨 chunk 断行是 SSE 手写解析唯一会错的地方,不测等于没写。
-- [ ] **M4-3 事件通道**
-  - mpsc → Tauri event `llm:chat:<id>`,前端 `$state` 字符串累加。
-  - 判据:首字 1 秒内出现;工具调用期间界面显示「正在查询路线…」。
-- [ ] **M4-4 `llm_chat_cancel`**
-  - 按 `streamId` 取消。发送键在流式期间换成停止键,**输入框保持可输入**(8.2 的 Loading 态)。
-  - 判据:点停止后 event 立刻不再来,且能马上发下一句。
+- [x] **M4-2 SSE 解析**(已完成 2026-09-24,不是 `bytes_stream`)
+  - 原文写「改 `bytes_stream`」,那是 async 的 API。按 M4-1 的决定走 blocking:
+    `shell/src/llm/sse.rs` 是一个**纯状态机**,喂任意切分的字节块,不碰 IO。
+  - 判据实测:10 条单测,含跨 chunk 切断的行、`[DONE]` 终止、`error` 事件立刻报错。
+- [x] **M4-3 事件通道**(已完成 2026-09-28,落点比原文大一圈)
+  - 不用 mpsc:`run_turn_streaming` 的 `on_event` 已经是回调,后台线程里直接
+    `app.emit(&format!("llm:chat:{stream_id}"), payload)`。多一层 channel 只是把
+    同一个回调换个形状,还多一处「发送端先挂掉」的错误要处理。
+  - **`llm_chat_start` 整个切成流式**:返回 `ChatStartHandle { streamId, convId, userMessage }`,
+    正文与工具进展走 event。非流式那条路没留兼容壳。
+  - **原文 §6.2 写「返回 `String`(streamId)」,这里多回两个字段。** 原形状有个漏洞:
+    会话是后端新建的,若 `convId` 只随成功事件回去,**上游失败时前端永远拿不到它** ——
+    而用户那句话已经落库了,下一句又会新建一个会话,库里于是攒下一串各含一条孤立
+    用户消息的会话。所以建会话与落用户消息放在 spawn 之前做完,两者一并同步返回。
+  - **`done` 事件带 `messages` 而不是原文的 `messageId`**:一轮可能新增 assistant 与
+    多条 tool 行,只回一个 id 前端仍得再查一次库。
+  - `toolEnd` 已带 §6.4.2 要求的 `plan` / `circle` 原始载荷，`types.ts` 已声明；M4-5 已完成。
+  - 这条义务已由下方 M4-5 条目落地，不再是未完成事项。
+  - **判据「首字 1 秒内出现」已实测**(2026-09-28,一次性 SSE 桩服务器,非真实 Key):
+    服务端首块立刻发、之后每 300ms 一块,总时长 1562ms。链路测得 **首个 delta 0ms**。
+    这个形状才证得了「边出字边推」:若实现读完整份响应才吐 delta,首字延迟会贴近
+    1562ms 而不是 0ms —— 一次性回完的桩测不出这个差别,所以桩必须分块慢发。
+  - 同一次实测顺带确认的三件事:请求体里 `stream: true` 与三个 tool 的 schema
+    **真的发到了线上**、`accept: text/event-stream` 头在、跨 chunk 切断的
+    `tool_calls.arguments` 拼回合法 JSON(分三片到达仍拼出完整参数)。
+  - 事件序列实测:纯文本轮是 `Delta` ×3 → `Done`(**`Delta` 不重复**,与 `run_loop`
+    的不变式一致);工具轮是 `ToolStart` → `ToolEnd(ok=false)` → `Delta` → `Done`,
+    即**工具失败被回灌后本轮继续**而不是中断。
+  - 判据另一半「工具调用期间显示具名动作」由单测钉住:`plan_route` → 「正在规划路线…」,
+    `delta` 到达后清空;未登记的工具名退回通用文案而不泄露 `mcp_` 这类内部标识符。
+  - **仍未实测的是真实模型**:桩服务器证明了线路与事件序列,证明不了某家中转商的
+    具体分片形状。
+- [x] **M4-4 `llm_chat_cancel`**(已完成 2026-09-28)
+  - `llm_chat_start` 每起一条流就往 `StreamRegistry` 登记 `Arc<AtomicBool>`,
+    流结束时**无论成败都摘掉**(`finish_stream`)—— 不摘会让这张表无界增长,而且
+    同一个 id 的第二次取消会「成功」,对一条已经结束的流。
+  - 取消只置标志位,不等流真的停下:那个线程可能正堵在 `read` 上。
+  - 取消用 `CANCELLED` / **status 499**,不用 5xx。499 是「客户端主动关闭」惯例码,
+    与真实失败分得开,界面据此不弹错误提示。
+  - 发送键在流式期间换成停止键,**输入框不禁用**(§8.2 的 Loading 态)。
+  - 判据实测:`停止后立刻能再发一句` 断言 `chatCancel` 收到 `s1` 且第二次 `send`
+    真的发出;`停止后到达的事件一概不改界面` 断言残余 `delta` 与 `CANCELLED` 都不
+    改列表 —— 后者是真实存在的竞态,后端那两条事件在取消后仍可能在路上。
+  - **后端取消已在真实 socket 上实测**(2026-09-28,同一个 SSE 桩):对一条永不结束的
+    流,置标志后 **617ms 返回 `CANCELLED` / status 499**(标志在 600ms 处置上,即约
+    17ms 内反应),已到的部分正文保留。桩服务器那侧打出 `closed-by-client`,
+    确认连接**真的断了**而不是后台线程还挂在 `read` 上继续收。
+- [x] **M4-5 tool 结果回灌进 planner(§6.4.2 的义务,新增条目)**
+  - 已完成。`tools.rs::dispatch` 一次执行同时产出两份结果:`summary` 是裁剪版,进
+    messages 给模型;`ToolPayload::Plan/Circle` 是未裁剪原始结构,随 `toolEnd` 回前端。
+  - `plan_route` 成功 → `planner.applyPlan`(含 `selectedRouteId`);`life_circle` 成功 →
+    `planner.applyCircle`(含服务包勾选与 `circleResults`);`search_place` 不回灌。
+  - 判据实测(2026-09-28,真实腾讯 Key,光谷广场 → 汉口火车站,地铁/时间):直接规划与
+    `dispatch` 的 4 个方案折线点数均为 `[29, 129, 13]`,完全一致;喂回模型的 summary
+    不含 `points` 数组。Rust 与前端分别有点数、载荷路由和失败/中间步骤回归测试。
 
 ### M5 MCP
 
@@ -768,18 +829,36 @@ AutoBee 取**随机** hex boundary id:确定性 id 可被第三方预测,而 MCP
   - 单 server 失败只跳过该 server。
   - **`wrap_external` 的伪造闭合标记检测比 nullclaw 原版严。** 移植时实测出原版三处可绕过:标记中间插零宽字符(U+200B / U+FEFF 等)原版判不匹配即放行;全角同形字母同理;闭合 `>>>` 找不到时原版 `return null` 放行,但那段内容拼上后文仍能闭合真边界。三处都补强了,并限 64 字符扫描窗口避免 O(n²)。
   - 判据实测:`cargo test -p autobee-shell` **111 passed / 0 failed**,含「一个 server 连不上时其余 server 的 tool 仍在列表里」。clippy 顺带修掉 `mcp.rs:482` 的 `manual_ignore_case_cmp`。
-- [ ] **M5-2 `mcp_servers` 表 + 设置页**
-  - URL 校验沿用「仅 HTTPS,或 HTTP 且 host 为本机」(nullclaw `config_types.zig:235-257` 的形状)。
-  - 判据:填一个 `http://` 的外网地址被拒,填 `http://127.0.0.1:x` 通过。
-- [ ] **M5-3 先打印真实 tool 清单**
-  - 连上百度 MCP 后**先跑 `tools/list`**,把真实 tool 标识符记进本文档。官方文档只给了中文能力名,没给标识符(7.4)。照文档猜名字会得到一个连不上的实现。
-  - 判据:本节下方补一张真实 tool 名表(现在是空的,这一条没做完就是没做)。
-- [ ] **M5-4 合并进 tool 列表**
-  - MCP tool 以 `mcp_<server>_<tool>` 前缀进 `agent.rs` 的列表(7.3.4)。返回值按 7.3.5 包裹:**随机 hex boundary id 配对**,并检测伪造的闭合标记(照 nullclaw `security/external_content.zig` 的 `matchSpoofedMarker`),不用固定字符串标记。
-  - 判据:单测「MCP 返回值里含伪造的闭合标记时,包裹层能检出」。MCP 结果是第三方内容,这条是注入防线本身。
+- [x] **M5-2 `mcp_servers` 表 + 设置页**
+  - `schema.rs` 在 VERSION 7 一起创建 `mcp_servers`; `commands/mcp.rs` 提供增删改查与 `tools/list` command;设置页提供启停、URL 校验、读取工具。
+  - URL 校验只放过 HTTPS，或指向 `127.0.0.1` / `localhost` / `::1` 的 HTTP。Rust 单测已验证外网 `http://` 被拒、本机 HTTP 通过。
+- [x] **M5-3 先打印真实 tool 清单**(2026-09-28 已完成)
+  - 使用仓库已有百度 AK 请求 `https://mcp.map.baidu.com/mcp?ak=<AK>`，完成 `initialize`、
+    `notifications/initialized`、`tools/list`。HTTP 状态分别为 `200`、`202`、`200`；
+    `tools/list` 返回 14 个工具。验证输出未打印 AK。
+  - 真实工具名表(百度返回原名，接入 AutoBee 后统一加 `mcp_baidu_` 前缀)：
+  - `map_geocode`
+  - `map_reverse_geocode`
+  - `map_search_places`
+  - `map_place_details`
+  - `map_directions_matrix`
+  - `map_directions`
+  - `map_weather`
+  - `map_ip_location`
+  - `map_road_traffic`
+  - `map_search_pro`
+  - `map_district_search`
+  - `map_uri`
+  - `map_mark`
+  - `map_geoconv`
+- [x] **M5-4 合并进 tool 列表**
+  - `McpRegistry::load_enabled` 每轮从启用的 MCP server 动态执行 `tools/list`,把远端 schema 以 `mcp_<server>_<tool>` 前缀合并进同一份 API `tools` 字段。
+  - `agent.rs` 对未命中内置工具的 `mcp_` 调用转发 `tools/call`;返回值经随机 hex boundary 包裹、伪造闭合标记检测后才回灌上下文。单个 server 连接失败只跳过该 server。
+  - 判据:回归测试已覆盖空 registry 不生成硬编码工具、前缀命名和伪造闭合标记检出；真实 MCP 端到端仍属于 M5-5。
 - [ ] **M5-5 验收扩展性**
-  - 判据一:连上百度 MCP,能答「明天下雨吗,这条路线要带伞吗」这类 AutoBee 单独答不了的问题。
-  - 判据二:在设置页再填一个**任意**第三方 MCP server,**不改一行 Rust、不重新编译**,该 server 的 tool 出现在模型可用列表里。这一条过不了说明 `agent.rs` 的 tool 列表还是硬编码的,底座没建成 —— 这才是纳入 MCP 的理由(7.0)。
+  - 判据一:连接百度 MCP,能回答 AutoBee 单独答不了的问题。
+  - 判据二:设置页再填任意第三方 MCP server,不改 Rust、不重新编译,其 tool 出现在模型可用列表并能被调用。
+  - 代码闭环已具备，但真实验收未完成：百度 MCP 的 `tools/list` 已通过并返回 14 个工具；真实调用 `map_weather` 返回百度侧 `Service activation timeout after 12 seconds`，提示需在百度控制台启用该 AK 的 MCP 服务。另需真实模型完成一次问答，当前不能勾选。
 
 ### 8.1 与大赛的关系
 

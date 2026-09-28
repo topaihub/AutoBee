@@ -9,7 +9,8 @@
    */
   import { providers } from "$lib/state/providers.svelte";
   import { llm } from "$lib/state/llm.svelte";
-  import type { Crs, LlmProtocol, LlmProviderInput, MapProviderInput, ProviderId } from "$lib/ipc/types";
+  import { mcp } from "$lib/state/mcp.svelte";
+  import type { Crs, LlmProtocol, LlmProviderInput, MapProviderInput, McpServerInput, ProviderId } from "$lib/ipc/types";
   import { DEFAULT_LABEL_THRESHOLDS } from "$lib/domain/accessibility";
   import { partialKeyHint } from "$lib/domain/provider-profile";
   import Dialog from "$lib/components/ui/dialog/Dialog.svelte";
@@ -29,14 +30,18 @@
   let browserKeyDrafts = $state<Record<string, string>>({});
   /** 每条档案本地编辑中的启用/优先级（点「保存」才落库）。 */
   let drafts = $state<Record<string, { enabled: boolean; priority: string }>>({});
+  /** MCP server 本地编辑中的名称、地址与启用状态。 */
+  let mcpDrafts = $state<Record<string, McpServerInput>>({});
 
   $effect(() => {
     if (open) {
       void providers.load();
       void llm.load();
+      void mcp.load();
       keyDrafts = {};
       browserKeyDrafts = {};
       llmKeyDrafts = {};
+      mcpDrafts = {};
     }
   });
 
@@ -52,6 +57,7 @@
     apiKey: "",
   };
   let newLlm = $state<LlmProviderInput>({ ...空白入口 });
+
 
   const llmProtocolOptions: Array<{ value: LlmProtocol; label: string }> = [
     { value: "openai-chat", label: "OpenAI 兼容（/chat/completions，多数中转商）" },
@@ -85,6 +91,31 @@
       ? [...current.map((m) => ({ model: m.model, alias: m.alias, toolsOk: m.toolsOk })), { model, toolsOk: true }]
       : current.filter((m) => m.model !== model).map((m) => ({ model: m.model, alias: m.alias, toolsOk: m.toolsOk }));
     await llm.saveModels(providerId, next);
+  }
+
+  function mcpDraftOf(server: (typeof mcp.list)[number]): McpServerInput {
+    return mcpDrafts[server.id] ?? {
+      id: server.id,
+      name: server.name,
+      url: server.url,
+      enabled: server.enabled,
+    };
+  }
+
+  async function saveMcp(server: (typeof mcp.list)[number]) {
+    await mcp.save(mcpDraftOf(server));
+  }
+
+  async function toggleMcp(server: (typeof mcp.list)[number], enabled: boolean) {
+    await mcp.save({ ...mcpDraftOf(server), enabled });
+  }
+
+  const 空白Mcp: McpServerInput = { name: "", url: "", enabled: true };
+  let newMcp = $state<McpServerInput>({ ...空白Mcp });
+
+  async function addMcp() {
+    await mcp.save({ ...newMcp, name: newMcp.name.trim(), url: newMcp.url.trim() });
+    if (!mcp.error) newMcp = { ...空白Mcp };
   }
 
   // 列表加载后同步本地草稿（只在还没有草稿时初始化，避免覆盖用户输入）
@@ -365,6 +396,81 @@
         <p class="mt-1.5 text-[11px] text-muted-foreground">
           Key 用 Windows DPAPI 加密后落盘，settings.db 里搜不到明文。
         </p>
+      </div>
+    {/if}
+  </section>
+
+  <Separator class="my-4" />
+
+  <section class="space-y-3">
+    <div class="flex items-center justify-between gap-2">
+      <div>
+        <h3 class="text-xs font-semibold text-muted-foreground">MCP 工具服务</h3>
+        <p class="mt-1 text-[11px] text-muted-foreground">只允许 HTTPS，或指向本机的 HTTP 服务。</p>
+      </div>
+      {#if mcp.saved}<Badge variant="success">已保存</Badge>{/if}
+    </div>
+    {#if mcp.error}
+      <p class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{mcp.error}</p>
+    {/if}
+    {#if mcp.loading}
+      <p class="py-4 text-center text-xs text-muted-foreground">加载中…</p>
+    {:else}
+      <div class="space-y-2">
+        {#each mcp.list as server (server.id)}
+          {@const draft = mcpDraftOf(server)}
+          <div class="rounded-lg border p-3">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex min-w-0 items-center gap-2">
+                <Switch checked={draft.enabled} onchange={(value) => void toggleMcp(server, value)} />
+                <span class="truncate text-sm font-medium">{server.name}</span>
+                {#if mcp.tools[server.id]}
+                  <Badge variant="success">{mcp.tools[server.id].length} 个工具</Badge>
+                {:else}
+                  <Badge variant="outline">未连接</Badge>
+                {/if}
+              </div>
+              <div class="flex shrink-0 items-center gap-1">
+                <Button size="sm" variant="outline" onclick={() => void mcp.loadTools(server.id)}>
+                  {mcp.fetching[server.id] ? "获取中…" : "读取工具"}
+                </Button>
+                <Button size="sm" onclick={() => void saveMcp(server)}>保存</Button>
+                <Button size="sm" variant="destructive" onclick={() => void mcp.remove(server.id)}>删除</Button>
+              </div>
+            </div>
+            <div class="mt-2 grid gap-2 sm:grid-cols-2">
+              <Input class="h-8 text-xs" ariaLabel="MCP server 名称" value={draft.name}
+                oninput={(event) => (mcpDrafts[server.id] = { ...draft, name: event.currentTarget.value })} />
+              <Input class="h-8 text-xs" ariaLabel="MCP server 地址" value={draft.url}
+                oninput={(event) => (mcpDrafts[server.id] = { ...draft, url: event.currentTarget.value })} />
+            </div>
+            {#if mcp.toolErrors[server.id]}
+              <p class="mt-1.5 text-[11px] text-destructive" role="alert">{mcp.toolErrors[server.id]}</p>
+            {/if}
+            {#if mcp.tools[server.id]?.length}
+              <div class="mt-2 max-h-32 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
+                {#each mcp.tools[server.id] as tool (tool.name)}
+                  <div class="text-[11px]">
+                    <span class="font-medium">{tool.name}</span>
+                    {#if tool.description}<span class="text-muted-foreground"> — {tool.description}</span>{/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+      <div class="rounded-lg border border-dashed p-3">
+        <p class="text-xs font-medium">添加 MCP server</p>
+        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+          <Input class="h-8 text-xs" ariaLabel="新 MCP server 名称" placeholder="如 baidu"
+            value={newMcp.name} oninput={(event) => (newMcp.name = event.currentTarget.value)} />
+          <Input class="h-8 text-xs" ariaLabel="新 MCP server 地址" placeholder="https://example.com/mcp"
+            value={newMcp.url} oninput={(event) => (newMcp.url = event.currentTarget.value)} />
+        </div>
+        <div class="mt-2 flex justify-end">
+          <Button size="sm" disabled={mcp.saving} onclick={() => void addMcp()}>{mcp.saving ? "保存中…" : "添加"}</Button>
+        </div>
       </div>
     {/if}
   </section>

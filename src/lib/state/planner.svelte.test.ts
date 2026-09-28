@@ -56,8 +56,13 @@ function fakeClient(overrides: Partial<PlannerClient> = {}): PlannerClient {
     listConversations: vi.fn(async () => []),
     readConversation: vi.fn(async () => []),
     deleteConversation: vi.fn(async () => undefined),
-    chatStart: vi.fn(async () => "s0"),
+    chatStart: vi.fn(async () => ({
+      streamId: "s0",
+      convId: "c0",
+      userMessage: { id: "m0", convId: "c0", role: "user" as const, content: "", createdAt: 0 },
+    })),
     chatCancel: vi.fn(async () => undefined),
+    onChatEvent: vi.fn(async () => () => {}),
     listMcpServers: vi.fn(async () => []),
     saveMcpServer: vi.fn(async () => []),
     deleteMcpServer: vi.fn(async () => []),
@@ -206,6 +211,27 @@ describe("PlannerState", () => {
     expect(state.circleResults).toHaveLength(2);
     state.togglePackage("family");
     expect(state.circleResults.map((result) => result.package)).toEqual(["care"]);
+  });
+
+  it("applyCircle 顺手勾上那一包，否则下次动复选框会把结果滤掉", () => {
+    const state = new PlannerState(fakeClient());
+    state.applyCircle({ package: "family", crs: "BD09", limitMinutes: 15, pois: [poi("社区公园")] });
+
+    expect(state.selectedPackages).toContain("family");
+    expect(state.reachablePois.map((p) => p.name)).toEqual(["社区公园"]);
+
+    // 没勾上的话这一步会把 family 滤光 —— 用户没取消过它，点位却没了。
+    state.togglePackage("emergency");
+    expect(state.circleResults.map((r) => r.package)).toContain("family");
+  });
+
+  it("applyCircle 同一包重查是替换而不是并存两份", () => {
+    const state = new PlannerState(fakeClient());
+    state.applyCircle({ package: "care", crs: "BD09", limitMinutes: 15, pois: [poi("老结果")] });
+    state.applyCircle({ package: "care", crs: "BD09", limitMinutes: 15, pois: [poi("新结果")] });
+
+    expect(state.circleResults).toHaveLength(1);
+    expect(state.reachablePois.map((p) => p.name)).toEqual(["新结果"]);
   });
 
   it("没有任何地点时不请求生活圈", async () => {

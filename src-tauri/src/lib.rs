@@ -11,6 +11,8 @@ pub fn run() {
 
     if let Err(error) = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // 正在跑的流的取消标志表。`llm_chat_start` 登记，`llm_chat_cancel` 置位。
+        .manage(commands::llm::StreamRegistry::default())
         .invoke_handler(tauri::generate_handler![
             commands::list_map_providers,
             commands::save_map_provider,
@@ -29,6 +31,15 @@ pub fn run() {
             commands::delete_llm_provider,
             commands::fetch_llm_models,
             commands::save_llm_models,
+            commands::list_conversations,
+            commands::read_conversation,
+            commands::delete_conversation,
+            commands::llm_chat_start,
+            commands::llm_chat_cancel,
+            commands::list_mcp_servers,
+            commands::save_mcp_server,
+            commands::delete_mcp_server,
+            commands::list_mcp_tools,
         ])
         .run(tauri::generate_context!())
     {

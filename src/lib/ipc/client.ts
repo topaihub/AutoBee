@@ -5,9 +5,11 @@
  * command 名必须与 `commands.rs` 里的函数名一致，对不上时运行时报
  * 「unknown command」—— 这种错误类型检查抓不到，改 Rust 侧时两边都要搜一遍。
  */
-import { invokeCmd } from "./tauri-client";
+import { invokeCmd, listenEvent } from "./tauri-client";
 import type {
   ChatMessage,
+  ChatStartHandle,
+  ChatStreamEvent,
   Conversation,
   Crs,
   LifeCircle,
@@ -55,15 +57,23 @@ export interface PlannerClient {
   listConversations(): Promise<Conversation[]>;
   readConversation(id: string): Promise<ChatMessage[]>;
   deleteConversation(id: string): Promise<void>;
-  /** 立即返回 streamId,内容走 `llm:chat:<streamId>` 事件 */
-  chatStart(convId: string | null, text: string, model: ModelRef): Promise<string>;
+  /**
+   * 起一轮对话。**立即返回**，正文与工具进展走 `llm:chat:<streamId>` 事件。
+   *
+   * 返回值里带 `convId` 与已落库的用户消息：会话可能是这次新建的，而上游失败时
+   * 不会有任何成功事件 —— 那时前端仍需知道往哪个会话追加，否则下一句又新建一个。
+   */
+  chatStart(convId: string | null, text: string, model: ModelRef): Promise<ChatStartHandle>;
+  /** 取消一条流。流已结束或 id 不存在时报 `STREAM_NOT_FOUND`。 */
   chatCancel(streamId: string): Promise<void>;
+  /** 订阅一条流的事件。返回退订函数，调用方**必须**在流结束后调它。 */
+  onChatEvent(streamId: string, handler: (event: ChatStreamEvent) => void): Promise<() => void>;
 
   listMcpServers(): Promise<McpServer[]>;
   saveMcpServer(input: McpServerInput): Promise<McpServer[]>;
   deleteMcpServer(id: string): Promise<McpServer[]>;
-  /** 连上去跑一次 tools/list,不落库 */
-  listMcpTools(id: string): Promise<McpToolInfo[]>;
+  /** 连上去跑一次 tools/list，不落库。`id` 省略则遍历全部启用的 server。 */
+  listMcpTools(id?: string): Promise<McpToolInfo[]>;
 }
 
 /** 真实实现：转发给 Tauri。 */
@@ -90,6 +100,7 @@ export const tauriPlannerClient: PlannerClient = {
   deleteConversation: (id) => invokeCmd("delete_conversation", { id }),
   chatStart: (convId, text, model) => invokeCmd("llm_chat_start", { convId, text, model }),
   chatCancel: (streamId) => invokeCmd("llm_chat_cancel", { streamId }),
+  onChatEvent: (streamId, handler) => listenEvent(`llm:chat:${streamId}`, handler),
   listMcpServers: () => invokeCmd("list_mcp_servers"),
   saveMcpServer: (input) => invokeCmd("save_mcp_server", { input }),
   deleteMcpServer: (id) => invokeCmd("delete_mcp_server", { id }),
