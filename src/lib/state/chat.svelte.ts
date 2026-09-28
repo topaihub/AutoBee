@@ -6,6 +6,7 @@
  * `done` 事件到了才换成库里那几条。
  */
 import { tauriPlannerClient, type PlannerClient } from "../ipc/client";
+import { SvelteMap } from "svelte/reactivity";
 import type { ChatMessage, ChatStreamEvent, Conversation, ModelRef, RoutePlan } from "../ipc/types";
 import { errorMessage, planner } from "./planner.svelte";
 
@@ -74,7 +75,7 @@ export class ChatState {
    * 本次运行期间收到的完整路线，按会话隔离。
    * SQLite 只存裁剪后的 tool 摘要，所以应用重启后不能伪造路线地图。
    */
-  #routePlans = new Map<string, RoutePlan>();
+  #routePlans = new SvelteMap<string, RoutePlan>();
   /** 当前流的退订函数。流结束或被取消时必须调，否则监听器越积越多。 */
   #unlisten: (() => void) | null = null;
 
