@@ -5,7 +5,6 @@
  * 里的接口，而不是这里 —— 见 ipc/client.ts 的 `PlannerClient`。
  */
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** 1×1 透明 PNG，浏览器预览里瓦片请求兜底用（base64，无 data: 前缀）。 */
 const TRANSPARENT_PNG =
@@ -39,18 +38,4 @@ export function invokeCmd<T>(command: string, args?: Record<string, unknown>): P
     );
   }
   return invoke<T>(command, args);
-}
-
-/**
- * 订阅一个后端事件。返回退订函数。
- *
- * 非 Tauri 环境返回一个空退订函数而不是抛错：浏览器预览里 `chatStart` 本来就会
- * 失败，订阅再抛第二个错只会盖掉那个真正说明问题的提示。
- */
-export async function listenEvent<T>(
-  name: string,
-  handler: (payload: T) => void,
-): Promise<UnlistenFn> {
-  if (!isTauri()) return () => {};
-  return listen<T>(name, (event) => handler(event.payload));
 }

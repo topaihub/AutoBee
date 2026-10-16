@@ -26,19 +26,8 @@
 //! 编译会报 24 个 `could not find __cmd__xxx in commands` —— 而报错里
 //! 一个字都没提宏生成。别把下面这行「整理」成显式清单。
 
-/// 地图能力：服务商档案、界面偏好、联想、算路、瓦片、生活圈、日志。
+/// 地图能力：服务商档案、界面偏好、联想、算路、瓦片、生活圈、路线快照。
+/// 大模型、会话、Skills、MCP、日志的 command 由 `tauri-plugin-aether` 注册。
 pub mod map;
 
-/// 大模型能力：服务入口档案、模型列表、会话读写、对话一轮。
-pub mod llm;
-
-/// MCP：server 档案 CRUD、连上去列工具。
-pub mod mcp;
-
-/// 用户侧 Skill：离线包导入、启停与 MCP server 绑定。
-pub mod skills;
-
-pub use llm::*;
 pub use map::*;
-pub use mcp::*;
-pub use skills::*;

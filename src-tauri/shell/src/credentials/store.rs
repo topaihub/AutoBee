@@ -59,7 +59,7 @@ impl Store {
         Ok(Self { conn })
     }
 
-    /// 大模型配置（[`crate::llm::store`]）与地图档案共用同一个 `settings.db`,必须共用
+    /// 路线快照（[`crate::snapshots`]）与地图档案共用同一个 `settings.db`,必须共用
     /// **同一个连接**:另开一条的现象不是报错，而是并发写时偶发 `database is locked`。
     #[must_use]
     pub fn conn(&self) -> &Connection {

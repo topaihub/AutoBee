@@ -22,24 +22,31 @@ name = "route_planner_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.6.3", features = [] }
+tauri-build = { version = "2.7.1", features = [] }
 
 [dependencies]
 route-core = { path = "core" }
 
-# 凭据、日志、路径。根包只剩 command 层，这些都在 shell 里。
+# 凭据、路径。根包只剩 command 层与 Aether 宿主，这些都在 shell 里。
 autobee-shell = { path = "shell" }
 
 # 插件版本写精确值而不是 "2"。原因同 ai-installer：Rust crate 与 npm 包是两半，
 # `tauri build` 会校验两边的 major/minor，写 "2" 时两边会各自漂开。
-tauri = { version = "2.11.5", features = [] }
+# 2.12：与 Aether 工作区钉的版本对齐，否则同图里会出现两份 tauri。
+tauri = { version = "2.12.1", features = [] }
 
-# MCP server 档案的 DTO 与 CRUD 在 command 层（`commands/mcp.rs`），会话消息的
-# tool_calls 列是 JSON 串，读写都在 `commands/llm.rs`。
-# 三者都已在 shell 的依赖图里，这里声明不增加任何编译量或供应链面。
-serde = { version = "1", features = ["derive"] }
+# 大模型服务、流式对话、Skills、MCP 客户端、日志全部来自 Aether（与 music-bot 同一钉法）。
+# 升级时这几处 `rev` 与 package.json 里 `@ouraihub/aether-ui` 一起改。
+aether-observability = { git = "https://github.com/ouraihub/Aether.git", rev = "91b10f7c4a9356e41f9e7859593afe7bebab314a" }
+aether-providers = { git = "https://github.com/ouraihub/Aether.git", rev = "91b10f7c4a9356e41f9e7859593afe7bebab314a" }
+aether-chat = { git = "https://github.com/ouraihub/Aether.git", rev = "91b10f7c4a9356e41f9e7859593afe7bebab314a" }
+aether-skills = { git = "https://github.com/ouraihub/Aether.git", rev = "91b10f7c4a9356e41f9e7859593afe7bebab314a" }
+aether-mcp-client = { git = "https://github.com/ouraihub/Aether.git", rev = "91b10f7c4a9356e41f9e7859593afe7bebab314a" }
+tauri-plugin-aether = { git = "https://github.com/ouraihub/Aether.git", rev = "91b10f7c4a9356e41f9e7859593afe7bebab314a", features = ["providers", "chat", "skills", "mcp-client"] }
+# KitHost 是 async_trait。
+async-trait = "0.1"
+
 serde_json = "1"
-rusqlite = { version = "0.40", features = ["bundled"] }
 tracing = "0.1"
 
 # 瓦片以 base64 下发：IPC 的 JSON  serializer 会把 Vec<u8> 变成数字数组
@@ -47,6 +54,12 @@ tracing = "0.1"
 base64 = "0.22"
 
 tauri-plugin-opener = "^2"
+
+[patch.crates-io]
+# aether-skills 钉了 `zip = "=2.4.2"`，而 2.4.2 已在 crates.io 被 yank：Aether 自己有
+# 锁文件不受影响，新宿主却解析不出来。改走同一版本的 git tag（git 源不存在 yank）。
+# ponytail: Aether 升级 zip 后删掉这段。
+zip = { git = "https://github.com/zip-rs/zip2.git", tag = "v2.4.2" }
 
 [lints.clippy]
 # 桌面工具跑在别人机器上，panic 等于闪退无日志。测试代码在模块里单独 allow。

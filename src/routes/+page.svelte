@@ -13,8 +13,9 @@
   import RouteCard from "$lib/components/app/RouteCard.svelte";
   import MapCanvas from "$lib/components/app/MapCanvas.svelte";
   import SettingsDialog from "$lib/components/app/SettingsDialog.svelte";
-  import LogPanel from "$lib/components/app/LogPanel.svelte";
-  import ChatPanel from "$lib/components/ChatPanel.svelte";
+  import { ChatPanel } from "@ouraihub/aether-ui/chat";
+  import { LogPanel, LogSettings } from "@ouraihub/aether-ui/logs";
+  import { assistant } from "$lib/state/assistant.svelte";
   import { providers } from "$lib/state/providers.svelte";
   type View = "route" | "circle" | "chat" | "logs";
   let settingsOpen = $state(false);
@@ -96,11 +97,30 @@
   </header>
 
   {#if view === "chat"}
-    <!-- 对话页复用 planner 的路线状态；切换到安心换乘后继续编辑而不重算。 -->
-    <ChatPanel onopenroute={() => selectView("route")} />
+    <!-- 对话归 Aether；路线工具算出的结果回灌 planner，切到安心换乘后继续编辑而不重算。 -->
+    <div class="flex min-h-0 flex-1 flex-col gap-3 p-4 lg:flex-row">
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <ChatPanel conversationId={assistant.conversationId} onConversationChange={(id) => void assistant.open(id)} />
+      </div>
+      {#if assistant.hasRoute && planner.plan}
+        <section class="flex shrink-0 flex-col gap-2 rounded-lg border bg-card p-3 lg:w-[420px]" aria-label="路线地图">
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <h3 class="truncate text-xs font-semibold">路线地图</h3>
+              <p class="truncate text-[11px] text-muted-foreground">{planner.plan.origin.title} → {planner.plan.destination.title}</p>
+            </div>
+            <Button variant="outline" size="sm" onclick={() => selectView("route")}>在安心换乘中调整</Button>
+          </div>
+          <MapCanvas class="h-[280px] w-full lg:h-auto lg:flex-1" />
+        </section>
+      {/if}
+    </div>
   {:else if view === "logs"}
     <!-- 日志占满：每行都长，挤在 400px 侧栏里全是折行。 -->
-    <LogPanel />
+    <div class="flex min-h-0 flex-1 flex-col gap-4 p-4">
+      <LogSettings />
+      <LogPanel />
+    </div>
   {:else}
   <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
     <aside class="flex w-full shrink-0 flex-col gap-4 overflow-y-auto border-b p-4 lg:w-[400px] lg:border-b-0 lg:border-r">

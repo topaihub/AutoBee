@@ -8,10 +8,10 @@
    * 数据全走 ProvidersState，这里只做表单绑定与按钮回调。
    */
   import { providers } from "$lib/state/providers.svelte";
-  import { llm } from "$lib/state/llm.svelte";
-  import { mcp } from "$lib/state/mcp.svelte";
-  import { skills } from "$lib/state/skills.svelte";
-  import type { Crs, LlmProtocol, LlmProviderInput, MapProviderInput, McpServerInput, ProviderId } from "$lib/ipc/types";
+  import type { Crs, MapProviderInput, ProviderId } from "$lib/ipc/types";
+  import { ProvidersSettings } from "@ouraihub/aether-ui/providers";
+  import { SkillsSettings } from "@ouraihub/aether-ui/skills";
+  import { McpClientSettings } from "@ouraihub/aether-ui/mcp";
   import { DEFAULT_LABEL_THRESHOLDS } from "$lib/domain/accessibility";
   import { partialKeyHint } from "$lib/domain/provider-profile";
   import Dialog from "$lib/components/ui/dialog/Dialog.svelte";
@@ -31,112 +31,14 @@
   let browserKeyDrafts = $state<Record<string, string>>({});
   /** 每条档案本地编辑中的启用/优先级（点「保存」才落库）。 */
   let drafts = $state<Record<string, { enabled: boolean; priority: string }>>({});
-  /** MCP server 本地编辑中的名称、地址与启用状态。 */
-  let mcpDrafts = $state<Record<string, McpServerInput>>({});
 
   $effect(() => {
     if (open) {
       void providers.load();
-      void llm.load();
-      void mcp.load();
-      void skills.load();
       keyDrafts = {};
       browserKeyDrafts = {};
-      llmKeyDrafts = {};
-      mcpDrafts = {};
     }
   });
-
-  /** 正在输入的大模型明文 Key，按 id 记；保存后清空。 */
-  let llmKeyDrafts = $state<Record<string, string>>({});
-
-  /** 新建入口的表单。id 为空表示还没保存过。 */
-  const 空白入口: LlmProviderInput = {
-    name: "",
-    baseUrl: "",
-    protocol: "openai-chat",
-    enabled: true,
-    apiKey: "",
-  };
-  let newLlm = $state<LlmProviderInput>({ ...空白入口 });
-
-
-  const llmProtocolOptions: Array<{ value: LlmProtocol; label: string }> = [
-    { value: "openai-chat", label: "OpenAI 兼容（/chat/completions，多数中转商）" },
-    { value: "openai-responses", label: "OpenAI Responses（/responses）" },
-    { value: "anthropic-messages", label: "Anthropic（/messages）" },
-  ];
-
-  async function addLlm() {
-    await llm.save({ ...newLlm, apiKey: newLlm.apiKey?.trim() || null });
-    if (!llm.error) newLlm = { ...空白入口 };
-  }
-
-  async function saveLlm(p: (typeof llm.list)[number]) {
-    const key = llmKeyDrafts[p.id]?.trim();
-    await llm.save({
-      id: p.id,
-      name: p.name,
-      baseUrl: p.baseUrl,
-      protocol: p.protocol,
-      enabled: p.enabled,
-      // 空串表示没动过：框里显示的是掩码，原样提交不能把掩码写成真 Key。
-      apiKey: key ? key : null,
-    });
-    delete llmKeyDrafts[p.id];
-  }
-
-  /** 勾选/取消一个模型后立刻覆盖保存 —— 多选框没有「保存」按钮。 */
-  async function toggleModel(providerId: string, model: string, picked: boolean) {
-    const current = llm.list.find((p) => p.id === providerId)?.models ?? [];
-    const next = picked
-      ? [...current.map((m) => ({ model: m.model, alias: m.alias, toolsOk: m.toolsOk })), { model, toolsOk: true }]
-      : current.filter((m) => m.model !== model).map((m) => ({ model: m.model, alias: m.alias, toolsOk: m.toolsOk }));
-    await llm.saveModels(providerId, next);
-  }
-
-  function mcpDraftOf(server: (typeof mcp.list)[number]): McpServerInput {
-    return mcpDrafts[server.id] ?? {
-      id: server.id,
-      name: server.name,
-      url: server.url,
-      enabled: server.enabled,
-    };
-  }
-
-  const BAIDU_MCP_ENDPOINT = "https://mcp.map.baidu.com/mcp";
-  function isBaiduMcp(server: (typeof mcp.list)[number]): boolean {
-    return server.url === BAIDU_MCP_ENDPOINT;
-  }
-
-  async function saveMcp(server: (typeof mcp.list)[number]) {
-    await mcp.save(mcpDraftOf(server));
-  }
-
-  async function toggleMcp(server: (typeof mcp.list)[number], enabled: boolean) {
-    await mcp.save({ ...mcpDraftOf(server), enabled });
-  }
-
-  const 空白Mcp: McpServerInput = { name: "", url: "", enabled: true };
-  let newMcp = $state<McpServerInput>({ ...空白Mcp });
-
-  async function addMcp() {
-    await mcp.save({ ...newMcp, name: newMcp.name.trim(), url: newMcp.url.trim() });
-    if (!mcp.error) newMcp = { ...空白Mcp };
-  }
-
-  function chooseSkillPackage(event: Event): void {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) void skills.importPackage(file);
-    input.value = "";
-  }
-
-  function skillMcpIds(skill: (typeof skills.list)[number], serverId: string, checked: boolean): string[] {
-    return checked
-      ? [...new Set([...skill.mcpServerIds, serverId])]
-      : skill.mcpServerIds.filter((id) => id !== serverId);
-  }
 
   // 列表加载后同步本地草稿（只在还没有草稿时初始化，避免覆盖用户输入）
   $effect(() => {
@@ -317,255 +219,21 @@
 
   <section class="space-y-3">
     <h3 class="text-xs font-semibold text-muted-foreground">大模型服务</h3>
-    {#if llm.error}
-      <p class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{llm.error}</p>
-    {/if}
-
-    {#if llm.loading}
-      <p class="py-6 text-center text-xs text-muted-foreground">加载中…</p>
-    {:else}
-      <div class="space-y-2">
-        {#each llm.list as p (p.id)}
-          <div class="rounded-lg border p-3">
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex min-w-0 items-center gap-2">
-                <Switch checked={p.enabled} onchange={(v) => void llm.save({ ...p, enabled: v, apiKey: null })} />
-                <span class="truncate text-sm font-medium">{p.name}</span>
-                {#if p.models.length > 0}
-                  <Badge variant="success">{p.models.length} 个模型</Badge>
-                {:else}
-                  <Badge variant="outline">未挑模型</Badge>
-                {/if}
-              </div>
-              <div class="flex shrink-0 items-center gap-1">
-                <Button size="sm" variant="outline" onclick={() => void llm.fetchModels(p.id)}>
-                  {llm.fetching[p.id] ? "获取中…" : "获取模型列表"}
-                </Button>
-                <Button size="sm" onclick={() => void saveLlm(p)}>保存</Button>
-                <Button size="sm" variant="destructive" onclick={() => void llm.remove(p.id)}>删除</Button>
-              </div>
-            </div>
-
-            <div class="mt-2 flex items-center gap-2">
-              <Input class="h-8 flex-1 text-xs" value={p.baseUrl} ariaLabel="{p.name} 的 base_url"
-                oninput={(e) => (p.baseUrl = e.currentTarget.value)} />
-              <Input
-                class="h-8 flex-1 text-xs"
-                type="password"
-                ariaLabel="{p.name} 的 API Key"
-                placeholder={p.apiKeyMasked || "填写 API Key"}
-                value={llmKeyDrafts[p.id] ?? ""}
-                oninput={(e) => (llmKeyDrafts[p.id] = e.currentTarget.value)}
-              />
-            </div>
-
-            {#if llm.fetchError[p.id]}
-              <p class="mt-1.5 text-[11px] text-destructive" role="alert">{llm.fetchError[p.id]}</p>
-            {/if}
-
-            {#if llm.candidates[p.id]?.length}
-              <div class="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
-                {#each llm.candidates[p.id] as model (model)}
-                  <label class="flex cursor-pointer items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      class="size-3.5"
-                      checked={p.models.some((m) => m.model === model)}
-                      onchange={(e) => void toggleModel(p.id, model, e.currentTarget.checked)}
-                    />
-                    <span class="truncate">{model}</span>
-                  </label>
-                {/each}
-              </div>
-            {:else if p.models.length > 0}
-              <p class="mt-1.5 text-[11px] text-muted-foreground">
-                已选：{p.models.map((m) => m.alias ?? m.model).join("、")}
-              </p>
-            {/if}
-          </div>
-        {/each}
-      </div>
-
-      <div class="rounded-lg border border-dashed p-3">
-        <p class="text-xs font-medium">添加服务入口</p>
-        <div class="mt-2 grid gap-2 sm:grid-cols-2">
-          <div class="space-y-1">
-            <Label for="llm-new-name">名称</Label>
-            <Input id="llm-new-name" class="h-8 text-xs" placeholder="如「某中转」"
-              value={newLlm.name} oninput={(e) => (newLlm.name = e.currentTarget.value)} />
-          </div>
-          <div class="space-y-1">
-            <Label for="llm-new-url">base_url</Label>
-            <Input id="llm-new-url" class="h-8 text-xs" placeholder="https://example.com/v1"
-              value={newLlm.baseUrl} oninput={(e) => (newLlm.baseUrl = e.currentTarget.value)} />
-          </div>
-          <div class="space-y-1">
-            <Label for="llm-new-proto">协议</Label>
-            <Select id="llm-new-proto" options={llmProtocolOptions} value={newLlm.protocol}
-              onchange={(e) => (newLlm.protocol = e.currentTarget.value as LlmProtocol)} />
-          </div>
-          <div class="space-y-1">
-            <Label for="llm-new-key">API Key</Label>
-            <Input id="llm-new-key" class="h-8 text-xs" type="password" placeholder="sk-…"
-              value={newLlm.apiKey ?? ""} oninput={(e) => (newLlm.apiKey = e.currentTarget.value)} />
-          </div>
-        </div>
-        <div class="mt-2 flex justify-end">
-          <Button size="sm" onclick={() => void addLlm()}>添加</Button>
-        </div>
-        <p class="mt-1.5 text-[11px] text-muted-foreground">
-          Key 用 Windows DPAPI 加密后落盘，settings.db 里搜不到明文。
-        </p>
-      </div>
-    {/if}
+    <ProvidersSettings />
   </section>
 
   <Separator class="my-4" />
 
   <section class="space-y-3">
-    <div class="flex items-center justify-between gap-2">
-      <div>
-        <h3 class="text-xs font-semibold text-muted-foreground">MCP 工具服务</h3>
-        <p class="mt-1 text-[11px] text-muted-foreground">只允许 HTTPS，或指向本机的 HTTP 服务。</p>
-      </div>
-      {#if mcp.saved}<Badge variant="success">已保存</Badge>{/if}
-    </div>
-    {#if mcp.error}
-      <p class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{mcp.error}</p>
-    {/if}
-    {#if mcp.loading}
-      <p class="py-4 text-center text-xs text-muted-foreground">加载中…</p>
-    {:else}
-      <div class="space-y-2">
-        {#each mcp.list as server (server.id)}
-          {@const draft = mcpDraftOf(server)}
-          <div class="rounded-lg border p-3">
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex min-w-0 items-center gap-2">
-                <Switch checked={draft.enabled} onchange={(value) => void toggleMcp(server, value)} />
-                <span class="truncate text-sm font-medium">{server.name}</span>
-                {#if mcp.tools[server.id]}
-                  <Badge variant="success">{mcp.tools[server.id].length} 个工具</Badge>
-                {:else}
-                  <Badge variant="outline">未连接</Badge>
-                {/if}
-              </div>
-              <div class="flex shrink-0 items-center gap-1">
-                <Button size="sm" variant="outline" onclick={() => void mcp.loadTools(server.id)}>
-                  {mcp.fetching[server.id] ? "获取中…" : "读取工具"}
-                </Button>
-                <Button size="sm" onclick={() => void saveMcp(server)}>保存</Button>
-                <Button size="sm" variant="destructive" onclick={() => void mcp.remove(server.id)}>删除</Button>
-              </div>
-            </div>
-            {#if isBaiduMcp(server)}
-              <p class="mt-2 text-[11px] text-muted-foreground">复用“百度地图”服务商中已配置的服务端 AK。</p>
-            {:else}
-              <div class="mt-2 grid gap-2 sm:grid-cols-2">
-                <Input class="h-8 text-xs" ariaLabel="MCP server 名称" value={draft.name}
-                  oninput={(event) => (mcpDrafts[server.id] = { ...draft, name: event.currentTarget.value })} />
-                <Input class="h-8 text-xs" ariaLabel="MCP server 地址" value={draft.url}
-                  oninput={(event) => (mcpDrafts[server.id] = { ...draft, url: event.currentTarget.value })} />
-              </div>
-            {/if}
-            {#if mcp.toolErrors[server.id]}
-              <p class="mt-1.5 text-[11px] text-destructive" role="alert">{mcp.toolErrors[server.id]}</p>
-            {/if}
-            {#if mcp.tools[server.id]?.length}
-              <div class="mt-2 max-h-32 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
-                {#each mcp.tools[server.id] as tool (tool.name)}
-                  <div class="text-[11px]">
-                    <span class="font-medium">{tool.name}</span>
-                    {#if tool.description}<span class="text-muted-foreground"> — {tool.description}</span>{/if}
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {/each}
-      </div>
-
-      <div class="rounded-lg border border-dashed p-3">
-        <p class="text-xs font-medium">添加 MCP server</p>
-        <div class="mt-2 grid gap-2 sm:grid-cols-2">
-          <Input class="h-8 text-xs" ariaLabel="新 MCP server 名称" placeholder="如 baidu"
-            value={newMcp.name} oninput={(event) => (newMcp.name = event.currentTarget.value)} />
-          <Input class="h-8 text-xs" ariaLabel="新 MCP server 地址" placeholder="https://example.com/mcp"
-            value={newMcp.url} oninput={(event) => (newMcp.url = event.currentTarget.value)} />
-        </div>
-        <div class="mt-2 flex justify-end">
-          <Button size="sm" disabled={mcp.saving} onclick={() => void addMcp()}>{mcp.saving ? "保存中…" : "添加"}</Button>
-        </div>
-      </div>
-    {/if}
+    <h3 class="text-xs font-semibold text-muted-foreground">MCP 工具服务</h3>
+    <McpClientSettings />
   </section>
-
 
   <Separator class="my-4" />
 
-  <section class="flex flex-col gap-3">
-    <div class="flex items-center justify-between gap-2">
-      <div>
-        <h3 class="text-xs font-semibold text-muted-foreground">Skills</h3>
-        <p class="mt-1 text-[11px] text-muted-foreground">离线包只提供对话指引和已绑定 MCP 工具；不会执行包内脚本。</p>
-      </div>
-      {#if skills.saved}<Badge variant="success">已保存</Badge>{/if}
-    </div>
-    {#if skills.error}
-      <p class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{skills.error}</p>
-    {/if}
-    <div class="flex items-center justify-between gap-2 rounded-lg border border-dashed p-3">
-      <div>
-        <p class="text-xs font-medium">导入本地 Skill 包</p>
-        <p class="mt-1 text-[11px] text-muted-foreground">仅接受含 skill.json 和 SKILL.md 的 .zip；新声明的 MCP 服务默认关闭。</p>
-      </div>
-      <label>
-        <input class="sr-only" type="file" accept=".zip,application/zip" onchange={chooseSkillPackage} disabled={skills.importing} />
-        <Button size="sm" disabled={skills.importing}>{skills.importing ? "导入中…" : "选择 .zip"}</Button>
-      </label>
-    </div>
-    {#if skills.loading}
-      <p class="py-4 text-center text-xs text-muted-foreground">加载中…</p>
-    {:else if skills.list.length === 0}
-      <p class="rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">还没有导入 Skill。</p>
-    {:else}
-      <div class="flex flex-col gap-2">
-        {#each skills.list as skill (skill.id)}
-          <div class="rounded-lg border p-3">
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex min-w-0 items-center gap-2">
-                <Switch checked={skill.enabled} onchange={(enabled) => void skills.setEnabled(skill.id, enabled)} />
-                <span class="truncate text-sm font-medium">{skill.name}</span>
-                <Badge variant="outline">v{skill.version}</Badge>
-              </div>
-              <Button size="sm" variant="destructive" disabled={skills.saving} onclick={() => void skills.remove(skill.id)}>删除</Button>
-            </div>
-            <p class="mt-2 text-xs text-muted-foreground">{skill.description}</p>
-            <details class="mt-2 text-xs">
-              <summary class="cursor-pointer text-muted-foreground">查看指引</summary>
-              <pre class="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/30 p-2 text-[11px]">{skill.instructions}</pre>
-            </details>
-            <div class="mt-3">
-              <p class="text-[11px] font-medium text-muted-foreground">绑定的 MCP 服务</p>
-              {#if mcp.list.length === 0}
-                <p class="mt-1 text-[11px] text-muted-foreground">先在 MCP 工具服务中添加一个 server。</p>
-              {:else}
-                <div class="mt-1 flex flex-col gap-1">
-                  {#each mcp.list as server (server.id)}
-                    <label class="flex cursor-pointer items-center gap-2 text-xs">
-                      <input type="checkbox" checked={skill.mcpServerIds.includes(server.id)}
-                        onchange={(event) => void skills.setMcpServers(skill.id, skillMcpIds(skill, server.id, event.currentTarget.checked))} />
-                      <span>{server.name}</span>
-                      {#if !server.enabled}<Badge variant="outline">服务已关闭</Badge>{/if}
-                    </label>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          </div>
-        {/each}
-      </div>
-    {/if}
+  <section class="space-y-3">
+    <h3 class="text-xs font-semibold text-muted-foreground">Skills</h3>
+    <SkillsSettings />
   </section>
   <Separator class="my-4" />
 

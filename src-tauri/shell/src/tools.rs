@@ -1,11 +1,11 @@
-//! 三个工具的 JSON Schema 声明与执行分派。
+//! 三个地图工具的 JSON Schema 声明与执行分派，供 Aether 的 `KitHost` 调用。
 //!
 //! schema 的 `enum` 值、错误文案里的可选值提示、`parse` 实现共用
 //! `TravelMode::ALL` / `SortBy::ALL` / `LifeCirclePackage::ALL` ——
 //! 三处同源才不会出现「schema 说能填、实现不认」的偏差。
 
-use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use route_core::config::Config;
@@ -125,8 +125,8 @@ pub fn tool_schemas() -> Vec<Value> {
 /// 一次工具调用的两份产物。
 ///
 /// 存在两份是 6.4.2 的要求,不是冗余:发回模型的 JSON 不含折线点(省上下文),
-/// 而地图要折线才画得出线。工具只执行一次,裁剪版进 messages,完整版随
-/// `toolEnd` 事件回前端。
+/// 而地图要折线才画得出线。工具只执行一次,裁剪版回模型,完整版作为 Aether
+/// `tool_result` 事件的 `payload` 回前端。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolOutcome {
     /// 喂回模型的字符串,已按 [`MAX_OUTPUT_CHARS`] 裁剪。
@@ -136,16 +136,18 @@ pub struct ToolOutcome {
     pub payload: Option<ToolPayload>,
 }
 
-/// 可回灌进 `planner` 的结构化结果。
+/// 可回灌进 `planner` 的结构化结果。序列化成 `{kind:"plan",plan}` /
+/// `{kind:"circle",circle}`，前端按 `kind` 分派。
 ///
 /// 用 enum 而不是两个 `Option` 字段:一次工具调用不可能同时产出路线和生活圈,
 /// 两个 `Option` 会让「都是 Some」这种不可能状态可被表达。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
 pub enum ToolPayload {
     /// 写 `planner.plan` 与 `planner.selectedRouteId`。
-    Plan(Box<RoutePlan>),
+    Plan { plan: Box<RoutePlan> },
     /// 写 `planner.circleResults`。
-    Circle(Box<LifeCircle>),
+    Circle { circle: Box<LifeCircle> },
 }
 
 impl ToolOutcome {
@@ -210,7 +212,9 @@ fn run_plan_route(config: &Config, arguments: &str) -> Result<ToolOutcome, AppEr
     let plan = core_plan_route(config, &query)?;
     Ok(ToolOutcome {
         summary: encode(&trim_plan(&plan))?,
-        payload: Some(ToolPayload::Plan(Box::new(plan))),
+        payload: Some(ToolPayload::Plan {
+            plan: Box::new(plan),
+        }),
     })
 }
 
@@ -256,7 +260,9 @@ fn run_life_circle(config: &Config, arguments: &str) -> Result<ToolOutcome, AppE
     circle.crs = crs;
     Ok(ToolOutcome {
         summary: encode(&trim_circle(&circle))?,
-        payload: Some(ToolPayload::Circle(Box::new(circle))),
+        payload: Some(ToolPayload::Circle {
+            circle: Box::new(circle),
+        }),
     })
 }
 

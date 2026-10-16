@@ -160,6 +160,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["build/", "dist/", ".svelte-kit/", "src-tauri/", "node_modules/", "tools/"],
+    ignores: ["build/", "dist/", ".svelte-kit/", "src-tauri/", "node_modules/", "tools/", ".omp/"],
   },
 );

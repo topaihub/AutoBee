@@ -6,6 +6,8 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig(async () => ({
   plugins: [tailwindcss(), sveltekit()],
+  // aether-ui 是 Svelte 源码包，交给 vite-plugin-svelte 编译，不走预构建。
+  optimizeDeps: { exclude: ["@ouraihub/aether-ui"] },
 
   // 1. 不让 Vite 清屏盖掉 Rust 的报错
   clearScreen: false,

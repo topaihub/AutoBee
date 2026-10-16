@@ -1,9 +1,9 @@
 [package]
-# 桌面外壳层：密钥存储、日志、路径。与 Tauri 无关，所以 GUI 与 CLI 两个
-# 入口都能依赖它 —— 这是把它从根包拆出来的唯一理由。
+# 桌面外壳层：密钥存储、地图工具、路线快照、路径。与 Tauri 无关，所以 GUI 与 CLI
+# 两个入口都能依赖它 —— 这是把它从根包拆出来的唯一理由。
 name = "autobee-shell"
 version = "0.1.0"
-description = "AutoBee 外壳层（凭据、日志、路径），不依赖 Tauri"
+description = "AutoBee 外壳层（凭据、地图工具、路径），不依赖 Tauri"
 authors = ["AutoBee"]
 edition = "2024"
 
@@ -14,13 +14,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["chrono", "env-filter"] }
 
 # bundled 把 SQLite 的 C 源码一起编进 exe，不依赖系统 DLL。
 rusqlite = { version = "0.40", features = ["bundled"] }
-
-# 只读内存中的离线 Skill 包；不解压、不执行包内文件。
-zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
 # crypto.rs 的 DPAPI 走这两个 feature。少一个的话 `#[cfg(windows)]` 那半

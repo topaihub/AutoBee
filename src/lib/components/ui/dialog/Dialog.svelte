@@ -18,7 +18,9 @@
   } = $props();
 
   function onKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") open = false;
+    // 里面开着 Aether 的弹窗/下拉（portal 到 body）时，Esc 归它们关，别把整个设置一起关掉。
+    if (e.key !== "Escape" || document.querySelector('body > [data-slot$="-content"], body > [data-bits-floating-content-wrapper]')) return;
+    open = false;
   }
 </script>
 

@@ -1,5 +1,5 @@
 //! 地图能力的 command：服务商档案、界面偏好、地点联想、算路、底图瓦片、
-//! 生活圈、日志回读。
+//! 生活圈、对话路线快照。
 //!
 //! 通用约定（`spawn_blocking`、每次重新读配置）见父模块 [`crate::commands`]。
 
@@ -344,18 +344,30 @@ pub async fn get_life_circle(
     .map_err(|error| join_failed(&error.to_string()))?
 }
 
-/// 回读后端日志尾部，供界面里的日志面板展示。
-///
-/// `limit` 是条数上限；传 0 按 200 处理 —— 前端漏传参数时给一屏可用的内容，
-/// 比给一个空面板好排查。
+/// 记下某个 Aether 会话最新一次的路线，重开会话时能重绘地图。
 ///
 /// # Errors
 ///
-/// 日志文件存在但读不动时返回错误。
+/// 档案库打不开或写入失败时返回错误。
 #[tauri::command]
-pub async fn read_logs(limit: usize) -> Result<Vec<autobee_shell::logs::LogEntry>, AppError> {
-    let limit = if limit == 0 { 200 } else { limit.min(2000) };
-    tauri::async_runtime::spawn_blocking(move || autobee_shell::logs::tail(limit))
-        .await
-        .map_err(|error| join_failed(&error.to_string()))?
+pub async fn save_route_snapshot(conv_id: String, plan: RoutePlan) -> Result<(), AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        autobee_shell::snapshots::save(Store::open()?.conn(), &conv_id, &plan)
+    })
+    .await
+    .map_err(|error| join_failed(&error.to_string()))?
+}
+
+/// 读某个会话的路线快照；没有路线的会话返回 `null`。
+///
+/// # Errors
+///
+/// 档案库打不开、查询失败或快照损坏时返回错误。
+#[tauri::command]
+pub async fn read_route_snapshot(conv_id: String) -> Result<Option<RoutePlan>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        autobee_shell::snapshots::read(Store::open()?.conn(), &conv_id)
+    })
+    .await
+    .map_err(|error| join_failed(&error.to_string()))?
 }

@@ -15,13 +15,13 @@ AutoBee 是一个**算路内核 + 三个入口**的桌面应用。内核 `route-
 flowchart TB
   subgraph 入口层
     UI[图形界面<br/>Svelte 5]
-    LLM[大模型对话<br/>tool calling]
+    LLM[大模型对话<br/>Aether ChatPanel]
     CLI[命令行<br/>autobee-cli]
   end
 
   subgraph 外壳层
     CMD[commands/<br/>Tauri IPC]
-    AGENT[llm/agent.rs<br/>回合循环]
+    AGENT[host.rs<br/>Aether KitHost]
     MAIN[cli/main.rs<br/>参数解析]
   end
 

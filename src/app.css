@@ -1,4 +1,9 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn-svelte/tailwind.css";
+/* Aether kit（问一问 / 大模型 / MCP / Skills / 日志）：尺寸 token + 让 Tailwind 扫到它的类。 */
+@import "@ouraihub/aether-ui/tokens.css";
+@source "../node_modules/@ouraihub/aether-ui/src";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -26,6 +31,7 @@
   --destructive-foreground: oklch(0.98 0.01 247);
   --success: oklch(0.63 0.15 155);
   --warning: oklch(0.75 0.15 70);
+  --info: oklch(0.58 0.14 250);
   --pending: oklch(0.68 0.02 257);
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
@@ -52,6 +58,7 @@
   --destructive-foreground: oklch(0.15 0.03 262);
   --success: oklch(0.7 0.14 155);
   --warning: oklch(0.78 0.14 70);
+  --info: oklch(0.72 0.13 250);
   --pending: oklch(0.6 0.02 257);
   --border: oklch(0.3 0.03 262);
   --input: oklch(0.3 0.03 262);
@@ -77,6 +84,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-info: var(--info);
   --color-pending: var(--pending);
   --color-border: var(--border);
   --color-input: var(--input);
@@ -104,4 +112,16 @@
 .map-canvas {
   display: block;
   touch-action: none;
+}
+
+/*
+ * Aether 的弹窗/下拉/菜单经 bits-ui portal 挂到 <body> 末尾，自带 z-50；
+ * AutoBee 的设置弹窗为盖住 WebGL 地图用了最大 z-index，于是 Aether 在设置里打开的
+ * 「新建服务商」「选模型」等全被压在下面，看不见也点不到。portal 出来的层都是
+ * body 的直接子节点，统一抬到同一最大值；同值时后挂载的在上，正好叠在设置弹窗之上。
+ */
+body > [data-slot$="-overlay"],
+body > [data-slot$="-content"],
+body > [data-bits-floating-content-wrapper] {
+  z-index: 2147483647 !important;
 }

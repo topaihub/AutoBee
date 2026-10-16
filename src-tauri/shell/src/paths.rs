@@ -31,12 +31,6 @@ pub fn settings_db() -> PathBuf {
     data_dir().join("settings.db")
 }
 
-/// 日志文件路径。
-#[must_use]
-pub fn log_file() -> PathBuf {
-    data_dir().join("logs").join("autobee.log")
-}
-
 #[allow(clippy::unwrap_used, reason = "测试里断言失败即测试失败")]
 #[cfg(test)]
 mod tests {
@@ -55,10 +49,6 @@ mod tests {
             "数据根目录必须是 exe 同级的 data"
         );
         assert_eq!(settings_db(), exe_dir.join("data").join("settings.db"));
-        assert_eq!(
-            log_file(),
-            exe_dir.join("data").join("logs").join("autobee.log")
-        );
         assert_eq!(tile_cache_dir(), exe_dir.join("data").join("tiles"));
     }
 

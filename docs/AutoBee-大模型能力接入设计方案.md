@@ -1,7 +1,10 @@
 # AutoBee 大模型能力接入设计方案
 
-> 状态:**待评审**。本文档描述尚未实现的能力,不描述现状。
-> 评审通过后再进入开发;第 12 节列出需要决策者拍板的问题。
+> 状态:**已被 Aether 取代(2026-10-16)**。下文的手写协议、SSE、回合循环、MCP 客户端、
+> Skill 包、会话表都已删除,改用 `tauri-plugin-aether`(providers/chat/skills/mcp-client)
+> 与 `@ouraihub/aether-ui`。仍然有效的只有三个地图工具的语义(`shell/src/tools.rs`)、
+> 系统提示的三条硬约束(`src-tauri/src/host.rs`)与「完整路线回灌地图」(`tool_result.payload`
+> + `route_snapshots` 表)。本文留作决策背景。
 
 ## 0. 背景
 
