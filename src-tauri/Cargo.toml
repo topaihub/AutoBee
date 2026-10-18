@@ -37,12 +37,12 @@ tauri = { version = "2.12.1", features = [] }
 
 # 大模型服务、流式对话、Skills、MCP 客户端、日志全部来自 Aether（与 music-bot 同一钉法）。
 # 升级时这几处 `rev` 与 package.json 里 `@ouraihub/aether-ui` 一起改。
-aether-observability = { git = "https://github.com/ouraihub/Aether.git", rev = "d739185" }
-aether-providers = { git = "https://github.com/ouraihub/Aether.git", rev = "d739185" }
-aether-chat = { git = "https://github.com/ouraihub/Aether.git", rev = "d739185" }
-aether-skills = { git = "https://github.com/ouraihub/Aether.git", rev = "d739185" }
-aether-mcp-client = { git = "https://github.com/ouraihub/Aether.git", rev = "d739185" }
-tauri-plugin-aether = { git = "https://github.com/ouraihub/Aether.git", rev = "d739185", features = ["providers", "chat", "skills", "mcp-client"] }
+aether-observability = { git = "https://github.com/ouraihub/Aether.git", rev = "074e18c9a241b8d0b508074dbbf22585f904e5b1" }
+aether-providers = { git = "https://github.com/ouraihub/Aether.git", rev = "074e18c9a241b8d0b508074dbbf22585f904e5b1" }
+aether-chat = { git = "https://github.com/ouraihub/Aether.git", rev = "074e18c9a241b8d0b508074dbbf22585f904e5b1" }
+aether-skills = { git = "https://github.com/ouraihub/Aether.git", rev = "074e18c9a241b8d0b508074dbbf22585f904e5b1" }
+aether-mcp-client = { git = "https://github.com/ouraihub/Aether.git", rev = "074e18c9a241b8d0b508074dbbf22585f904e5b1" }
+tauri-plugin-aether = { git = "https://github.com/ouraihub/Aether.git", rev = "074e18c9a241b8d0b508074dbbf22585f904e5b1", features = ["providers", "chat", "skills", "mcp-client"] }
 # KitHost 是 async_trait。
 async-trait = "0.1"
 

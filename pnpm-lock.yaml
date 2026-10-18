@@ -167,8 +167,8 @@ importers:
   .:
     dependencies:
       '@ouraihub/aether-ui':
-        specifier: github:ouraihub/Aether#d739185&path:packages/ui
-        version: https://codeload.github.com/ouraihub/Aether/tar.gz/d7391853cf6427ca3014f7b75d782e655532d3c7#path:packages/ui(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(tailwindcss@4.3.3)
+        specifier: github:ouraihub/Aether#074e18c9a241b8d0b508074dbbf22585f904e5b1&path:packages/ui
+        version: https://codeload.github.com/ouraihub/Aether/tar.gz/074e18c9a241b8d0b508074dbbf22585f904e5b1#path:packages/ui(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(tailwindcss@4.3.3)
       '@tauri-apps/api':
         specifier: ^2.12.3
         version: 2.12.4
@@ -343,8 +343,8 @@ packages:
     peerDependencies:
       svelte: ^5
 
-  '@ouraihub/aether-ui@https://codeload.github.com/ouraihub/Aether/tar.gz/d7391853cf6427ca3014f7b75d782e655532d3c7#path:packages/ui':
-    resolution: {gitHosted: true, integrity: sha512-QIFwSlzcFJb2gV/L1c2MNpb5gk5mcnvsxseh8adrou5aU/yE5IKzYpNNml7yJpqiveMnH/RPFMNtH29XbVcLcA==, path: packages/ui, tarball: https://codeload.github.com/ouraihub/Aether/tar.gz/d7391853cf6427ca3014f7b75d782e655532d3c7}
+  '@ouraihub/aether-ui@https://codeload.github.com/ouraihub/Aether/tar.gz/074e18c9a241b8d0b508074dbbf22585f904e5b1#path:packages/ui':
+    resolution: {gitHosted: true, integrity: sha512-K7phb6cPFYFkDfR32KfeDIaQB668R8R28qflBjVAn+od7XdeeavWLyzA8BjpR6uU+o1uTw+Z3uchOpVd7Mf0eA==, path: packages/ui, tarball: https://codeload.github.com/ouraihub/Aether/tar.gz/074e18c9a241b8d0b508074dbbf22585f904e5b1}
     version: 0.1.0
     peerDependencies:
       svelte: ^5.57.1
@@ -1791,7 +1791,7 @@ snapshots:
     dependencies:
       svelte: 5.57.1(@typescript-eslint/types@8.70.1)
 
-  '@ouraihub/aether-ui@https://codeload.github.com/ouraihub/Aether/tar.gz/d7391853cf6427ca3014f7b75d782e655532d3c7#path:packages/ui(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(tailwindcss@4.3.3)':
+  '@ouraihub/aether-ui@https://codeload.github.com/ouraihub/Aether/tar.gz/074e18c9a241b8d0b508074dbbf22585f904e5b1#path:packages/ui(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(tailwindcss@4.3.3)':
     dependencies:
       '@internationalized/date': 3.12.4
       '@lucide/svelte': 0.561.0(svelte@5.57.1(@typescript-eslint/types@8.70.1))
