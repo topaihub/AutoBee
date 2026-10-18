@@ -30,7 +30,8 @@
   },
   "//deps": "插件版本必须与 src-tauri/Cargo.toml 的 Rust crate 同 major/minor，否则 tauri build 拒绝构建。",
   "dependencies": {
-    "@ouraihub/aether-ui": "github:ouraihub/Aether#074e18c9a241b8d0b508074dbbf22585f904e5b1&path:packages/ui",
+    "@ouraihub/aether-presets": "github:ouraihub/Aether#76b8d92981ea9bdfac0878dbebb29a6bef725f8f&path:packages/presets",
+    "@ouraihub/aether-ui": "github:ouraihub/Aether#76b8d92981ea9bdfac0878dbebb29a6bef725f8f&path:packages/ui",
     "@tauri-apps/api": "^2.12.3",
     "@tauri-apps/plugin-opener": "^2.5.5",
     "shadcn-svelte": "1.7.0",
