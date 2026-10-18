@@ -9,6 +9,7 @@
    */
   import { providers } from "$lib/state/providers.svelte";
   import type { Crs, MapProviderInput, ProviderId } from "$lib/ipc/types";
+  import type { ProviderPreset } from "@ouraihub/aether-ui/ports";
   import { ProvidersSettings } from "@ouraihub/aether-ui/providers";
   import { SkillsSettings } from "@ouraihub/aether-ui/skills";
   import { McpClientSettings } from "@ouraihub/aether-ui/mcp";
@@ -22,6 +23,30 @@
   import Separator from "$lib/components/ui/separator/Separator.svelte";
   import Switch from "$lib/components/ui/switch/Switch.svelte";
   import Badge from "$lib/components/ui/badge/Badge.svelte";
+
+  const PROVIDER_PRESETS: ProviderPreset[] = [
+    {
+      id: "qiniu",
+      name: "七牛云",
+      baseUrl: "https://api.qnaigc.com",
+      protocol: "openai-chat",
+      apiKeyUrl: "https://s.qiniu.com/BfyeU3",
+    },
+    {
+      id: "siliconflow",
+      name: "硅基流动",
+      baseUrl: "https://api.siliconflow.cn/v1",
+      protocol: "openai-chat",
+      apiKeyUrl: "https://cloud.siliconflow.cn/i/ieP7r6Bx",
+    },
+    {
+      id: "fenno",
+      name: "Fenno",
+      baseUrl: "https://api.fenno.ai/v1",
+      protocol: "openai-chat",
+      apiKeyUrl: "https://api.fenno.ai/s/vWbM",
+    },
+  ];
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -219,7 +244,7 @@
 
   <section class="space-y-3">
     <h3 class="text-xs font-semibold text-muted-foreground">大模型服务</h3>
-    <ProvidersSettings />
+    <ProvidersSettings presets={PROVIDER_PRESETS} />
   </section>
 
   <Separator class="my-4" />
