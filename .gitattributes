@@ -18,6 +18,7 @@
 *.exe binary
 *.woff2 binary
 
-# 锁文件的 diff 没人读，但冲突时要能合。
+# 锁文件的 diff 没人读，但冲突时要能合。Cargo.lock 固定 LF：cargo 写出的就是 LF，
+# 否则 core.autocrlf=true 的机器每次 cargo update 后都会提示"LF will be replaced by CRLF"。
 pnpm-lock.yaml -diff
-Cargo.lock -diff
+Cargo.lock -diff text eol=lf
