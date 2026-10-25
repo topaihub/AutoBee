@@ -37,7 +37,7 @@ src-tauri/gen/schemas/
 
 # 内置 pnpm 的原生二进制:45.5 MB,不在 pnpm-12.5.1.tgz 里,是首次运行
 # bin/pnpm.mjs 时联网下载的。不提交它换来仓库从 50 MB 降到 5 MB,
-# 代价是新机器第一次跑 dev.bat / build-app.bat 需要能连 npm registry。
+# 代价是新机器第一次跑 dev:app / build:app 需要能连 npm registry。
 tools/pnpm-standalone/package/pnpm-native.exe
 
 # 编辑器与系统垃圾

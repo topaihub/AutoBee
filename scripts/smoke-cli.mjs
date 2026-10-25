@@ -21,7 +21,7 @@ const cli = path.join(target, "autobee-cli.exe");
 
 if (!existsSync(cli)) {
   console.error(`ERROR: 找不到 autobee-cli.exe:${cli}`);
-  console.error("       先跑 scripts\\build-app.bat,或传一个目录进来。");
+  console.error("       先跑 pnpm run build:app,或传一个目录进来。");
   process.exit(1);
 }
 

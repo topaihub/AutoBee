@@ -432,21 +432,26 @@ shell 那 55 条按模块实测:`llm::store` 8、`llm::probe` 3、`credentials::
 - [x] **M6-5 验收与质量门** — 覆盖合法包、恶意包、启停工具可见性、导航链路不变；`pnpm verify` 全绿。
 ## 开发环境:两条不知道就会卡住的
 
-### cargo 必须走 wrapper
+### cargo 必须走 desktop-kit
 
 ```
-cmd.exe /d /c call "scripts\cargo-msvc.bat" test --workspace
-cmd.exe /d /c call "scripts\cargo-msvc.bat" clippy --workspace --all-targets -- -D warnings
-cmd.exe /d /c call "scripts\cargo-msvc.bat" fmt --all -- --check
+pnpm run test:rust      # = desktop-kit cargo test --workspace
+pnpm run clippy
+pnpm run fmt:rust
 ```
 
 裸 `cargo` 在这台机器上链接会失败:Git 自带的 coreutils 里有个 `link.exe`,
-它在 PATH 里遮蔽了 MSVC 的链接器。wrapper 就是把 MSVC 的路径放到前面。
+它在 PATH 里遮蔽了 MSVC 的链接器。`desktop-kit cargo` 先注入便携 MSVC
+(默认 `D:\Applications\msvc-portable\msvc`,可用 `PORTABLE_MSVC_ROOT` 改;首次运行
+`node_modules\@ouraihub\desktop-kit\msvc\setup-msvc.bat` 下载)。
+构建 `pnpm run build:app`(产物 `dist/candidate-windows/` 与 `dist/AutoBee/`),
+清理 `pnpm run clean`(`-- --deep` 连 node_modules 一起删;不碰 `tools/` 和 `data/`)。
 
 ### pnpm 用 vendored standalone
 
 ```
 node tools/pnpm-standalone/package/bin/pnpm.mjs run verify
+node tools\pnpm-standalone\package\bin\pnpm.mjs run build:app
 ```
 
 裸 `pnpm` 首次调用会挂住:`package.json` 里 `packageManager: pnpm@12.5.1`
