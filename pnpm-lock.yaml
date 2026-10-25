@@ -189,8 +189,8 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.11.0(jiti@2.7.0))
       '@ouraihub/desktop-kit':
-        specifier: github:ouraihub/desktop-kit#c5817b626598d13c3c0692bf7a627f2d2e51e61b
-        version: https://codeload.github.com/ouraihub/desktop-kit/tar.gz/c5817b626598d13c3c0692bf7a627f2d2e51e61b
+        specifier: github:ouraihub/desktop-kit#c7c8281885dc0e88293abda4f67fd5570dee37db
+        version: https://codeload.github.com/ouraihub/desktop-kit/tar.gz/c7c8281885dc0e88293abda4f67fd5570dee37db
       '@sveltejs/adapter-static':
         specifier: ^3.0.10
         version: 3.0.10(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(jiti@2.7.0)))
@@ -361,8 +361,8 @@ packages:
     peerDependencies:
       svelte: ^5.57.1
 
-  '@ouraihub/desktop-kit@https://codeload.github.com/ouraihub/desktop-kit/tar.gz/c5817b626598d13c3c0692bf7a627f2d2e51e61b':
-    resolution: {gitHosted: true, integrity: sha512-Ac3zW/D5FY8b7B3B1CL0AQcyFBjdg1RACoUKAbQ126u8UecV3uiAcmL0K4vPbLxPoexuGc2wxFEFwo1xJFNqLw==, tarball: https://codeload.github.com/ouraihub/desktop-kit/tar.gz/c5817b626598d13c3c0692bf7a627f2d2e51e61b}
+  '@ouraihub/desktop-kit@https://codeload.github.com/ouraihub/desktop-kit/tar.gz/c7c8281885dc0e88293abda4f67fd5570dee37db':
+    resolution: {gitHosted: true, integrity: sha512-E606ivfsSZgRFKNn+zTW24vsxkWATzScZdlxUcMCyj4JK/5RxwdijUgS0JosBOxyZLynnSgLvy87wfhQSwOVKw==, tarball: https://codeload.github.com/ouraihub/desktop-kit/tar.gz/c7c8281885dc0e88293abda4f67fd5570dee37db}
     version: 0.2.0
     engines: {node: '>=22.18'}
     hasBin: true
@@ -1833,7 +1833,7 @@ snapshots:
       - tailwind-merge
       - tailwindcss
 
-  '@ouraihub/desktop-kit@https://codeload.github.com/ouraihub/desktop-kit/tar.gz/c5817b626598d13c3c0692bf7a627f2d2e51e61b': {}
+  '@ouraihub/desktop-kit@https://codeload.github.com/ouraihub/desktop-kit/tar.gz/c7c8281885dc0e88293abda4f67fd5570dee37db': {}
 
   '@oxc-project/types@0.150.0': {}
 
