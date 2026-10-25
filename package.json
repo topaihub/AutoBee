@@ -13,15 +13,16 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "eslint .",
     "test": "vitest run",
-    "//test:rust": "必须带 --workspace:不带时只测根包 autobee,route-core 的算路/坐标系/解码单测与 shell 的地图工具单测都不会跑 —— 而那些是本项目最值钱的测试。build-app.bat 的 [3/6] 质量门走的就是这条。",
-    "test:rust": "scripts\\cargo-msvc.bat test --workspace",
-    "clippy": "scripts\\cargo-msvc.bat clippy --workspace --all-targets -- -D warnings",
-    "fmt:rust": "scripts\\cargo-msvc.bat fmt --all -- --check",
-    "fmt:rust:fix": "scripts\\cargo-msvc.bat fmt --all",
-    "dev:app": "scripts\\dev.bat",
-    "build:app": "scripts\\build-app.bat",
-  "//smoke:cli": "跑在打包产物上,不是 cargo run:§3.1 约束一是「exe 真的往控制台打字」,而 windows_subsystem 只在 release 生效,debug 能过而 release 静默是可能的。没配 Key 时算路那几条会 SKIP 而不是 FAIL。",
-  "smoke:cli": "node scripts/smoke-cli.mjs",
+    "//test:rust": "必须带 --workspace:不带时只测根包 autobee,route-core 的算路/坐标系/解码单测与 shell 的地图工具单测都不会跑 —— 而那些是本项目最值钱的测试。desktop-kit build 前的 verify 质量门走的就是这条。",
+    "test:rust": "desktop-kit cargo test --workspace",
+    "clippy": "desktop-kit cargo clippy --workspace --all-targets -- -D warnings",
+    "fmt:rust": "desktop-kit cargo fmt --all -- --check",
+    "fmt:rust:fix": "desktop-kit cargo fmt --all",
+    "dev:app": "desktop-kit dev",
+    "build:app": "desktop-kit build",
+    "clean": "desktop-kit clean",
+    "//smoke:cli": "跑在打包产物上,不是 cargo run:§3.1 约束一是「exe 真的往控制台打字」,而 windows_subsystem 只在 release 生效,debug 能过而 release 静默是可能的。没配 Key 时算路那几条会 SKIP 而不是 FAIL。",
+    "smoke:cli": "node scripts/smoke-cli.mjs",
     "verify": "pnpm run check && pnpm run lint && pnpm run test && pnpm run test:rust && pnpm run clippy && pnpm run fmt:rust",
     "tauri": "tauri"
   },
@@ -39,6 +40,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@ouraihub/desktop-kit": "github:ouraihub/desktop-kit#c7c8281885dc0e88293abda4f67fd5570dee37db",
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.70.3",
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
@@ -55,5 +57,17 @@
     "typescript-eslint": "^8.70.1",
     "vite": "^8.3.0",
     "vitest": "^5.0.1"
+  },
+  "desktopKit": {
+    "portable": {
+      "binaries": [
+        "autobee-cli"
+      ]
+    },
+    "clean": {
+      "paths": [
+        ".tmp"
+      ]
+    }
   }
 }
